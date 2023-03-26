@@ -337,6 +337,8 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     }
 
     function withdraw() external onlyOwner nonReentrant {
+        string memory currentBaseURI = _baseURI();
+        require(bytes(currentBaseURI).length > 0, "Base URI not set");
         (bool os, ) = payable(owner()).call{value: address(this).balance}("");
         require(os, "Transfer failed");
     }
