@@ -40,26 +40,26 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     /// Constants
     //////////////////////////////////////////////
 
-    /// Total Supply
-    uint256 public constant TOTAL_SUPPLY = 5000;
-
     /// Presale price for OG members
     uint256 public constant PRESALE_PRICE_OG = 0.025 ether;
 
-    /// Presale price for whitelisted members
+    /// Presale price for whitelist members
     uint256 public constant PRESALE_PRICE_WL = 0.025 ether;
 
-    /// Maximum mint per transaction for og members
-    uint32 public constant PRESALE_MAX_MINT_OG = 5;
+    /// Total supply
+    uint16 public constant TOTAL_SUPPLY = 5000;
 
-    /// Maximum mint per transaction for whitelisted members
-    uint32 public constant PRESALE_MAX_MINT_WL = 5;
-
-    /// Minutes interval for OG members to mint before presale for whitelisted members
-    uint16 public constant PRESALE_INTERVAL = 900; // 15 minutes in ms
+    /// Interval for OG members to mint their token during presale
+    uint16 public constant PRESALE_INTERVAL = 15 minutes;
 
     /// Number of reserved tokens
-    uint16 public constant RESERVED_TOKENS = 20;
+    uint16 public constant RESERVED_TOKENS = 50;
+
+    /// Maximum token per wallet for OG
+    uint8 public constant MAX_TOKEN_PER_OG_WALLET = 2;
+
+    /// Maximum token per wallet
+    uint8 public constant MAX_TOKEN_PER_WALLET = 1;
 
     ///////////////////////////////////////////////
     /// Storage
@@ -77,19 +77,40 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     /// Reveal Date
     uint64 public revealDate;
 
-    /// Maximum mint per transaction for public sale
-    uint32 public maxMintPerTx;
-
-    /// Merkle roots
+    /// Merkle roots for OG
     bytes32 public ogMerkleRoot;
+
+    /// Merkle roots for whitelist members
     bytes32 public wlMerkleRoot;
 
     /// Metadata URI
     string public metadataBaseURI;
 
-    /// Records of already claimed whitelisted wallets
-    mapping(address => bool) public hasWlClaimed;
+    /// Records of already claimed OG wallets
     mapping(address => bool) public hasOgClaimed;
+
+    /// Records of already claimed whitelist wallets
+    mapping(address => bool) public hasWlClaimed;
+
+    ///////////////////////////////////////////////
+    /// Events
+    //////////////////////////////////////////////
+
+    event SetPrice(uint256 indexed _price);
+
+    event SetMetadataBaseURI(string indexed _uri);
+
+    event SetOgMerkleRoot(bytes32 indexed _merkleRoot);
+
+    event SetWlMerkleRoot(bytes32 indexed _merkleRoot);
+
+    event SetPresaleDate(uint64 indexed _date);
+
+    event SetPublicSaleDate(uint64 indexed _date);
+
+    event SetRevealDate(uint64 indexed _date);
+
+    event Withdraw();
 
     ///////////////////////////////////////////////
     /// Constructor
@@ -97,7 +118,6 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
 
     constructor(
         uint256 _price,
-        uint32 _maxMintPerTx,
         uint64 _presaleDate,
         uint64 _publicSaleDate,
         uint64 _revealDate,
@@ -105,27 +125,20 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         bytes32 _wlMerkleRoot,
         string memory _metadataBaseURI
     ) ERC721A("Who Is Who", "WhoIsWho") {
-        /// Set public price
         price = _price;
 
-        /// Set max mint per transaction
-        maxMintPerTx = _maxMintPerTx;
-
-        /// @notice Initial presale, public, and reveal dates are set during contract's deployment.
-        /// These are changeable variables; this might change after the contract has been deployed
+        /**
+         * @notice Initial presale, public, and reveal dates are set during contract's deployment.
+         * These are changeable variables; this might change after the contract has been deployed
+         */
         presaleDate = _presaleDate;
         publicSaleDate = _publicSaleDate;
         revealDate = _revealDate;
 
-        /// Merkle roots for og and whitelisted members, will be used to verify wallets during
-        /// whitelist mint
         ogMerkleRoot = _ogMerkleRoot;
         wlMerkleRoot = _wlMerkleRoot;
-
-        /// Set metadata base uri
         metadataBaseURI = _metadataBaseURI;
 
-        /// Mint reserved tokens upon deployment
         _safeMint(_msgSender(), RESERVED_TOKENS);
     }
 
@@ -133,33 +146,32 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     /// Modifiers
     //////////////////////////////////////////////
 
-    modifier mintCompliance(uint256 _mintAmount, uint256 _maxPurchase) {
-        if (_mintAmount > _maxPurchase) {
+    modifier mintCompliance(
+        uint256 _mintAmount,
+        uint256 _price,
+        uint256 _maxPurchasePerWallet
+    ) {
+        if (_mintAmount > _maxPurchasePerWallet) {
             revert WhoIsWho__MaxMint();
         }
 
-        uint256 totalSupplyAfterMint;
-
-        /// @dev Overflow is impossible because `_mintAmount` is validated first by checking if
-        /// it is greater than `maxPurchase`, where `maxPurchase` is determined by the admin
+        /**
+         * @dev Overflow is impossible because `_mintAmount` is validated first by checking if
+         * it is greater than `_maxPurchasePerWallet`, where `_maxPurchasePerWallet` is determined
+         * by the admin, and `price` is either a constant or determined by the admin
+         */
         unchecked {
-            totalSupplyAfterMint = totalSupply() + _mintAmount;
-        }
+            uint256 totalSupplyAfterMint = totalSupply() + _mintAmount;
 
-        if (totalSupplyAfterMint > TOTAL_SUPPLY) {
-            revert WhoIsWho__MaxMint();
-        }
-        _;
-    }
+            if (totalSupplyAfterMint > TOTAL_SUPPLY) {
+                revert WhoIsWho__MaxMint();
+            }
 
-    modifier mintPriceCompliance(uint256 _mintAmount, uint256 _cost) {
-        uint256 totalCost;
-        unchecked {
-            totalCost = _cost * _mintAmount;
-        }
+            uint256 totalCost = _price * _mintAmount;
 
-        if (msg.value < totalCost) {
-            revert WhoIsWho__InsufficientFunds();
+            if (msg.value < totalCost) {
+                revert WhoIsWho__InsufficientFunds();
+            }
         }
         _;
     }
@@ -185,8 +197,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PRESALE_OG)
-        mintCompliance(_mintAmount, PRESALE_MAX_MINT_OG)
-        mintPriceCompliance(_mintAmount, PRESALE_PRICE_OG)
+        mintCompliance(_mintAmount, PRESALE_PRICE_OG, MAX_TOKEN_PER_OG_WALLET)
     {
         if (hasOgClaimed[_msgSender()]) {
             revert WhoIsWho__AlreadyClaimed();
@@ -210,8 +221,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PRESALE_WL)
-        mintCompliance(_mintAmount, PRESALE_MAX_MINT_WL)
-        mintPriceCompliance(_mintAmount, PRESALE_PRICE_WL)
+        mintCompliance(_mintAmount, PRESALE_PRICE_WL, MAX_TOKEN_PER_WALLET)
     {
         if (hasWlClaimed[_msgSender()]) {
             revert WhoIsWho__AlreadyClaimed();
@@ -234,8 +244,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PUBLIC_SALE)
-        mintCompliance(_mintAmount, maxMintPerTx)
-        mintPriceCompliance(_mintAmount, price)
+        mintCompliance(_mintAmount, price, MAX_TOKEN_PER_WALLET)
     {
         _safeMint(_msgSender(), _mintAmount);
     }
@@ -270,15 +279,22 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
 
     function getSaleStage() public view returns (SaleStage stage) {
         uint64 timeNow = uint64(block.timestamp);
-        uint256 interval;
 
         if (timeNow >= publicSaleDate) {
             return SaleStage.PUBLIC_SALE;
         }
 
-        /// @notice Adding `PRESALE_INTERVAL` to the presale date, it means that the minting
-        /// timeframe for OG members has come to an end
+        uint64 interval;
+
+        /**
+         * @dev Overflow is impossible because `presaleDate` is determined by the admin and
+         * `PRESALE_INTERVAL` is a constant
+         */
         unchecked {
+            /**
+             * @dev Adding `PRESALE_INTERVAL` to the presale date, it means that the minting
+             * timeframe for OG members has come to an end
+             */
             interval = presaleDate + PRESALE_INTERVAL;
         }
 
@@ -286,9 +302,11 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
             return SaleStage.PRESALE_WL;
         }
 
-        /// @notice During the presale date, OG members will have first dibs on minting.
-        /// After that, whitelisted members can start minting too, but only after a
-        /// certain number of minutes defined in `PRESALE_INTERVAL`.
+        /**
+         * @dev During presale, OG members will have priority access to minting their
+         * tokens, followed by whitelist members who can start minting only after a
+         * specified time period defined in `PRESALE_INTERVAL` has elapsed
+         */
         if (timeNow >= presaleDate) {
             return SaleStage.PRESALE_OG;
         }
@@ -301,8 +319,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     //////////////////////////////////////////////
 
     function isReveal() internal view returns (bool) {
-        uint64 timeNow = uint64(block.timestamp);
-        return timeNow >= revealDate;
+        return uint64(block.timestamp) >= revealDate;
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
@@ -319,42 +336,48 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
 
     function setPrice(uint256 _price) external onlyOwner {
         price = _price;
-    }
-
-    function setMaxMintPerTx(uint32 _maxMintPerTx) external onlyOwner {
-        maxMintPerTx = _maxMintPerTx;
+        emit SetPrice(_price);
     }
 
     function setMetadataBaseURI(string memory _uri) external onlyOwner {
         metadataBaseURI = _uri;
+        emit SetMetadataBaseURI(_uri);
     }
 
     function setOgMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
         ogMerkleRoot = _merkleRoot;
+        emit SetOgMerkleRoot(_merkleRoot);
     }
 
     function setWlMerkleRoot(bytes32 _merkleRoot) external onlyOwner {
         wlMerkleRoot = _merkleRoot;
+        emit SetWlMerkleRoot(_merkleRoot);
     }
 
     function setPresaleDate(uint64 _date) external onlyOwner {
         presaleDate = _date;
+        emit SetPresaleDate(_date);
     }
 
     function setPublicSaleDate(uint64 _date) external onlyOwner {
         publicSaleDate = _date;
+        emit SetPublicSaleDate(_date);
     }
 
     function setRevealDate(uint64 _date) external onlyOwner {
         revealDate = _date;
+        emit SetRevealDate(_date);
     }
 
-    /// @notice Owner should set the base uri first for the collection before the
-    /// owner can withdraw all the funds
+    /**
+     * @notice Owner should set the base uri first for the collection before the
+     * owner can withdraw all the funds
+     */
     function withdraw() external onlyOwner {
         string memory currentBaseURI = _baseURI();
         require(bytes(currentBaseURI).length > 0, "Base URI not set");
         (bool os, ) = payable(owner()).call{value: address(this).balance}("");
         require(os, "Transfer failed");
+        emit Withdraw();
     }
 }
