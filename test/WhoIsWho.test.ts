@@ -28,13 +28,14 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
   let minter: SignerWithAddress;
   let minter2: SignerWithAddress;
   let minter3: SignerWithAddress;
+  let minter4: SignerWithAddress;
   let contract: Contract;
   let ogListedSigners: SignerWithAddress[];
   let whitelistedSigners: SignerWithAddress[];
 
   before(async function () {
     const signers = await ethers.getSigners();
-    [owner, minter, minter2, minter3] = signers;
+    [owner, minter, minter2, minter3, minter4] = signers;
 
     // Get 3 hardhat test OG addresses starting from 7th index
     ogListedSigners = signers.slice(7, 10);
@@ -60,8 +61,14 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       expect(await contract.PRESALE_PRICE_WL()).to.equal(
         getPrice(CollectionConfig.presale.wl.price, 1)
       );
-      expect(await contract.MAX_TOKEN_PER_OG_WALLET()).to.equal(
-        CollectionConfig.maxTokenPerOgWallet
+      expect(await contract.PRESALE_MAX_MINT_OG()).to.equal(
+        CollectionConfig.presale.og.maxMintPerTx
+      );
+      expect(await contract.PRESALE_MAX_MINT_WL()).to.equal(
+        CollectionConfig.presale.wl.maxMintPerTx
+      );
+      expect(await contract.PUBLIC_MAX_MINT()).to.equal(
+        CollectionConfig.publicSale.maxMintPerTx
       );
       expect(await contract.MAX_TOKEN_PER_WALLET()).to.equal(
         CollectionConfig.maxTokenPerWallet
@@ -106,12 +113,12 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(ogListedSigners[0])
           .ogMint(
-            CollectionConfig.maxTokenPerOgWallet,
+            CollectionConfig.presale.og.maxMintPerTx,
             getProof(merkleTree, ogListedSigners[0].address),
             {
               value: getPrice(
                 CollectionConfig.presale.og.price,
-                CollectionConfig.maxTokenPerOgWallet
+                CollectionConfig.presale.og.maxMintPerTx
               )
             }
           )
@@ -122,59 +129,58 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       // Should time travel to presale date
       await timeTravel(CollectionConfig.presale.date);
 
+      // OG Mint #1
       let currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // OG Mint #1
       await contract
         .connect(ogListedSigners[0])
         .ogMint(
-          CollectionConfig.maxTokenPerOgWallet,
+          CollectionConfig.presale.og.maxMintPerTx,
           getProof(merkleTree, ogListedSigners[0].address),
           {
             value: getPrice(
               CollectionConfig.presale.og.price,
-              CollectionConfig.maxTokenPerOgWallet
+              CollectionConfig.presale.og.maxMintPerTx
             )
           }
         );
 
-      let totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerOgWallet;
+      let totalSupplyAfter =
+        currentTotalSupply + CollectionConfig.presale.og.maxMintPerTx;
 
-      // OG #1 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(ogListedSigners[0].address);
       }
 
+      // OG Mint #2
       currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // OG Mint #2
       await contract
         .connect(ogListedSigners[1])
         .ogMint(
-          CollectionConfig.maxTokenPerOgWallet,
+          CollectionConfig.presale.og.maxMintPerTx,
           getProof(merkleTree, ogListedSigners[1].address),
           {
             value: getPrice(
               CollectionConfig.presale.og.price,
-              CollectionConfig.maxTokenPerOgWallet
+              CollectionConfig.presale.og.maxMintPerTx
             )
           }
         );
 
-      totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerOgWallet;
+      totalSupplyAfter = currentTotalSupply + CollectionConfig.presale.og.maxMintPerTx;
 
-      // OG #2 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(ogListedSigners[1].address);
       }
 
       // Check balances
       expect(await contract.balanceOf(ogListedSigners[0].address)).to.equal(
-        CollectionConfig.maxTokenPerOgWallet
+        CollectionConfig.presale.og.maxMintPerTx
       );
 
       expect(await contract.balanceOf(ogListedSigners[1].address)).to.equal(
-        CollectionConfig.maxTokenPerOgWallet
+        CollectionConfig.presale.og.maxMintPerTx
       );
     });
 
@@ -183,12 +189,12 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(minter)
           .ogMint(
-            CollectionConfig.maxTokenPerOgWallet,
+            CollectionConfig.presale.og.maxMintPerTx,
             getProof(merkleTree, minter.address),
             {
               value: getPrice(
                 CollectionConfig.presale.og.price,
-                CollectionConfig.maxTokenPerOgWallet
+                CollectionConfig.presale.og.maxMintPerTx
               )
             }
           )
@@ -200,7 +206,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(ogListedSigners[2])
           .ogMint(
-            CollectionConfig.maxTokenPerOgWallet,
+            CollectionConfig.presale.og.maxMintPerTx,
             getProof(merkleTree, ogListedSigners[2].address),
             {
               value: utils.parseEther('0.0001')
@@ -209,8 +215,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__InsufficientFunds');
     });
 
-    it('should revert when OG tries to mint more than the allowed max mint per tx', async function () {
-      // OG Mint #3
+    it('should revert when OG tries to mint more than the allowed max token per tx', async function () {
       await expect(
         contract
           .connect(ogListedSigners[2])
@@ -220,18 +225,17 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
 
-    it('should revert when OG tries to mint again where OG already claimed the NFT', async function () {
-      // OG Mint #1
+    it('should revert when OG tries to mint again after claiming an NFT', async function () {
       await expect(
         contract
           .connect(ogListedSigners[0])
           .ogMint(
-            CollectionConfig.maxTokenPerOgWallet,
+            CollectionConfig.presale.og.maxMintPerTx,
             getProof(merkleTree, ogListedSigners[0].address),
             {
               value: getPrice(
                 CollectionConfig.presale.og.price,
-                CollectionConfig.maxTokenPerOgWallet
+                CollectionConfig.presale.og.maxMintPerTx
               )
             }
           )
@@ -260,12 +264,12 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(whitelistedSigners[0])
           .wlMint(
-            CollectionConfig.maxTokenPerWallet,
+            CollectionConfig.presale.wl.maxMintPerTx,
             getProof(merkleTree, whitelistedSigners[0].address),
             {
               value: getPrice(
                 CollectionConfig.presale.wl.price,
-                CollectionConfig.maxTokenPerWallet
+                CollectionConfig.presale.wl.maxMintPerTx
               )
             }
           )
@@ -276,59 +280,58 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       // Should time travel
       await timeTravel(CollectionConfig.presale.date + CollectionConfig.presaleInterval);
 
+      // WL Mint #1
       let currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // WL Mint #1
       await contract
         .connect(whitelistedSigners[0])
         .wlMint(
-          CollectionConfig.maxTokenPerWallet,
+          CollectionConfig.presale.wl.maxMintPerTx,
           getProof(merkleTree, whitelistedSigners[0].address),
           {
             value: getPrice(
               CollectionConfig.presale.wl.price,
-              CollectionConfig.maxTokenPerWallet
+              CollectionConfig.presale.wl.maxMintPerTx
             )
           }
         );
 
-      let totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerWallet;
+      let totalSupplyAfter =
+        currentTotalSupply + CollectionConfig.presale.wl.maxMintPerTx;
 
-      // WL #1 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(whitelistedSigners[0].address);
       }
 
+      // WL Mint #2
       currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // WL Mint #2
       await contract
         .connect(whitelistedSigners[1])
         .wlMint(
-          CollectionConfig.maxTokenPerWallet,
+          CollectionConfig.presale.wl.maxMintPerTx,
           getProof(merkleTree, whitelistedSigners[1].address),
           {
             value: getPrice(
               CollectionConfig.presale.wl.price,
-              CollectionConfig.maxTokenPerWallet
+              CollectionConfig.presale.wl.maxMintPerTx
             )
           }
         );
 
-      totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerWallet;
+      totalSupplyAfter = currentTotalSupply + CollectionConfig.presale.wl.maxMintPerTx;
 
-      // WL #2 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(whitelistedSigners[1].address);
       }
 
       // Check balances
       expect(await contract.balanceOf(whitelistedSigners[0].address)).to.equal(
-        CollectionConfig.maxTokenPerWallet
+        CollectionConfig.presale.wl.maxMintPerTx
       );
 
       expect(await contract.balanceOf(whitelistedSigners[1].address)).to.equal(
-        CollectionConfig.maxTokenPerWallet
+        CollectionConfig.presale.wl.maxMintPerTx
       );
     });
 
@@ -337,12 +340,27 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(minter)
           .wlMint(
-            CollectionConfig.maxTokenPerWallet,
+            CollectionConfig.presale.wl.maxMintPerTx,
             getProof(merkleTree, minter.address),
             {
               value: getPrice(
                 CollectionConfig.presale.wl.price,
-                CollectionConfig.maxTokenPerWallet
+                CollectionConfig.presale.wl.maxMintPerTx
+              )
+            }
+          )
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__InvalidProof');
+
+      await expect(
+        contract
+          .connect(ogListedSigners[0])
+          .wlMint(
+            CollectionConfig.presale.wl.maxMintPerTx,
+            getProof(merkleTree, ogListedSigners[0].address),
+            {
+              value: getPrice(
+                CollectionConfig.presale.wl.price,
+                CollectionConfig.presale.wl.maxMintPerTx
               )
             }
           )
@@ -354,7 +372,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract
           .connect(whitelistedSigners[2])
           .wlMint(
-            CollectionConfig.maxTokenPerWallet,
+            CollectionConfig.presale.wl.maxMintPerTx,
             getProof(merkleTree, whitelistedSigners[2].address),
             {
               value: utils.parseEther('0.0001')
@@ -364,7 +382,6 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
     });
 
     it('should revert when WL tries to mint more than the allowed max mint per tx', async function () {
-      // WL Mint #3
       await expect(
         contract
           .connect(whitelistedSigners[2])
@@ -374,18 +391,17 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
 
-    it('should revert when WL tries to mint again where WL already claimed the NFT', async function () {
-      // WL Mint #1
+    it('should revert when WL tries to mint again after claiming an NFT', async function () {
       await expect(
         contract
           .connect(whitelistedSigners[0])
           .wlMint(
-            CollectionConfig.maxTokenPerWallet,
+            CollectionConfig.presale.wl.maxMintPerTx,
             getProof(merkleTree, whitelistedSigners[0].address),
             {
               value: getPrice(
                 CollectionConfig.presale.wl.price,
-                CollectionConfig.maxTokenPerWallet
+                CollectionConfig.presale.wl.maxMintPerTx
               )
             }
           )
@@ -396,14 +412,9 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
   describe('#Public Sale', () => {
     it('should revert when minter tries to mint during presale', async function () {
       await expect(
-        contract
-          .connect(minter)
-          .functions['mint(uint256)'](CollectionConfig.maxTokenPerWallet, {
-            value: getPrice(
-              CollectionConfig.publicSale.price,
-              CollectionConfig.maxTokenPerWallet
-            )
-          })
+        contract.connect(minter).functions['mint(uint256)'](1, {
+          value: getPrice(CollectionConfig.publicSale.price, 1)
+        })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__StageNotReady');
     });
 
@@ -411,91 +422,101 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       // Should time travel
       await timeTravel(CollectionConfig.publicSale.date);
 
-      let currentTotalSupply = parseInt(await contract.totalSupply());
-
       // Minter #1
-      await contract
-        .connect(minter)
-        .functions['mint(uint256)'](CollectionConfig.maxTokenPerWallet, {
-          value: getPrice(
-            CollectionConfig.publicSale.price,
-            CollectionConfig.maxTokenPerWallet
-          )
-        });
+      let currentTotalSupply = parseInt(await contract.totalSupply());
+      await contract.connect(minter).functions['mint(uint256)'](1, {
+        value: getPrice(CollectionConfig.publicSale.price, 1)
+      });
 
-      let totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerWallet;
+      let totalSupplyAfter = currentTotalSupply + 1;
 
-      // Minter #1 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(minter.address);
       }
 
+      // Minter #2
       currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // Minter #2
-      await contract
-        .connect(minter2)
-        .functions['mint(uint256)'](CollectionConfig.maxTokenPerWallet, {
-          value: getPrice(
-            CollectionConfig.publicSale.price,
-            CollectionConfig.maxTokenPerWallet
-          )
-        });
+      await contract.connect(minter2).functions['mint(uint256)'](3, {
+        value: getPrice(CollectionConfig.publicSale.price, 3)
+      });
 
-      totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerWallet;
+      totalSupplyAfter = currentTotalSupply + 3;
 
-      // Minter #2 should own the minted tokens
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(minter2.address);
       }
 
+      // Minter #3
       currentTotalSupply = parseInt(await contract.totalSupply());
 
-      // Minter #3
       await contract
-        .connect(ogListedSigners[0])
-        .functions['mint(uint256)'](CollectionConfig.maxTokenPerWallet, {
+        .connect(minter3)
+        .functions['mint(uint256)'](CollectionConfig.publicSale.maxMintPerTx, {
           value: getPrice(
             CollectionConfig.publicSale.price,
-            CollectionConfig.maxTokenPerWallet
+            CollectionConfig.publicSale.maxMintPerTx
           )
         });
 
-      totalSupplyAfter = currentTotalSupply + CollectionConfig.maxTokenPerWallet;
+      totalSupplyAfter = currentTotalSupply + CollectionConfig.publicSale.maxMintPerTx;
 
-      // Minter #3 should own the minted tokens
+      for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
+        expect(await contract.ownerOf(i)).to.equal(minter3.address);
+      }
+
+      // Minter #4 (OG)
+      currentTotalSupply = parseInt(await contract.totalSupply());
+
+      await contract.connect(ogListedSigners[0]).functions['mint(uint256)'](5, {
+        value: getPrice(CollectionConfig.publicSale.price, 5)
+      });
+
+      totalSupplyAfter = currentTotalSupply + 5;
+
       for (let i = currentTotalSupply; i < totalSupplyAfter; i++) {
         expect(await contract.ownerOf(i)).to.equal(ogListedSigners[0].address);
       }
 
       // Check balances
-      expect(await contract.balanceOf(minter.address)).to.equal(
-        CollectionConfig.maxTokenPerWallet
+      expect(await contract.balanceOf(minter.address)).to.equal(1);
+      expect(await contract.balanceOf(minter2.address)).to.equal(3);
+      expect(await contract.balanceOf(minter3.address)).to.equal(
+        CollectionConfig.publicSale.maxMintPerTx
       );
 
-      expect(await contract.balanceOf(minter2.address)).to.equal(
-        CollectionConfig.maxTokenPerWallet
-      );
+      // OG already minted 2 tokens in the previous test case
+      expect(await contract.balanceOf(ogListedSigners[0].address)).to.equal(7);
+    });
 
-      // OG has already minted NFTs in the previous test case so we add OGs current minted tokens
-      expect(await contract.balanceOf(ogListedSigners[0].address)).to.equal(
-        CollectionConfig.maxTokenPerWallet + CollectionConfig.maxTokenPerOgWallet
-      );
+    it('should revert when minter tries to mint more than the allowed total token per wallet', async function () {
+      const balance = await contract.balanceOf(minter3.address);
+      const amount = CollectionConfig.maxTokenPerWallet - parseInt(balance) + 1;
+
+      await expect(
+        contract.connect(minter3).functions['mint(uint256)'](amount, {
+          value: getPrice(CollectionConfig.publicSale.price, amount)
+        })
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
+    });
+
+    it('should revert when mint amount is 0', async function () {
+      await expect(
+        contract.connect(minter4).functions['mint(uint256)'](0)
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__ZeroMintAmount');
     });
 
     it('should revert when minter tries to mint with insufficient funds', async function () {
       await expect(
-        contract
-          .connect(ogListedSigners[0])
-          .functions['mint(uint256)'](CollectionConfig.maxTokenPerWallet, {
-            value: utils.parseEther('0.0001')
-          })
+        contract.connect(minter4).functions['mint(uint256)'](1, {
+          value: utils.parseEther('0.0001')
+        })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__InsufficientFunds');
     });
 
     it('should revert when minter tries to mint more than the allowed max mint per tx', async function () {
       await expect(
-        contract.connect(ogListedSigners[0]).functions['mint(uint256)'](100, {
+        contract.connect(minter4).functions['mint(uint256)'](100, {
           value: getPrice(CollectionConfig.publicSale.price, 100)
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');

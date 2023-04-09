@@ -7,23 +7,24 @@ export const CollectionConfig = {
   maxSupply: 5000,
   presale: {
     wl: {
-      price: 0.025
+      price: 0.025,
+      maxMintPerTx: 1
     },
     og: {
-      price: 0.025
+      price: 0.025,
+      maxMintPerTx: 2
     },
     date: 1684108800
   },
   publicSale: {
     price: 0.03,
-    date: 1684368000
+    date: 1684368000,
+    maxMintPerTx: 5
   },
   presaleInterval: 900, // 15 minutes in seconds
   reservedTokens: 50,
-  contractAddress: null,
   revealDate: 1684454400,
-  maxTokenPerWallet: 1,
-  maxTokenPerOgWallet: 2,
+  maxTokenPerWallet: 10,
   metadataBaseURI: ''
 };
 

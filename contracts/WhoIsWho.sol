@@ -19,6 +19,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
+error WhoIsWho__ZeroMintAmount();
 error WhoIsWho__MaxMint();
 error WhoIsWho__InsufficientFunds();
 error WhoIsWho__StageNotReady();
@@ -47,7 +48,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     uint256 public constant PRESALE_PRICE_WL = 0.025 ether;
 
     /// Total supply
-    uint16 public constant TOTAL_SUPPLY = 5000;
+    uint32 public constant TOTAL_SUPPLY = 5000;
 
     /// Interval for OG members to mint their token during presale
     uint16 public constant PRESALE_INTERVAL = 15 minutes;
@@ -55,11 +56,17 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     /// Number of reserved tokens
     uint16 public constant RESERVED_TOKENS = 50;
 
-    /// Maximum token per wallet for OG
-    uint8 public constant MAX_TOKEN_PER_OG_WALLET = 2;
+    /// Max number of tokens per tx during presale for OG
+    uint8 public constant PRESALE_MAX_MINT_OG = 2;
 
-    /// Maximum token per wallet
-    uint8 public constant MAX_TOKEN_PER_WALLET = 1;
+    /// Max number of tokens per tx during presale for WL
+    uint8 public constant PRESALE_MAX_MINT_WL = 1;
+
+    /// Max number of tokens per tx during public sale
+    uint8 public constant PUBLIC_MAX_MINT = 5;
+
+    /// Max token per wallet
+    uint8 public constant MAX_TOKEN_PER_WALLET = 10;
 
     ///////////////////////////////////////////////
     /// Storage
@@ -149,25 +156,31 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     modifier mintCompliance(
         uint256 _mintAmount,
         uint256 _price,
-        uint256 _maxPurchasePerWallet
+        uint256 _maxPurchasePerTx
     ) {
-        if (_mintAmount > _maxPurchasePerWallet) {
+        if (_mintAmount == 0) {
+            revert WhoIsWho__ZeroMintAmount();
+        }
+
+        if (_mintAmount > _maxPurchasePerTx) {
             revert WhoIsWho__MaxMint();
         }
 
         /**
          * @dev Overflow is impossible because `_mintAmount` is validated first by checking if
-         * it is greater than `_maxPurchasePerWallet`, where `_maxPurchasePerWallet` is determined
-         * by the admin, and `price` is either a constant or determined by the admin
+         * it is greater than `_maxPurchasePerTx`, where `_maxPurchasePerTx` is set
+         * by the admin, and `price` is either a constant or set by the admin
          */
         unchecked {
+            uint256 totalBalanceAfterMint = balanceOf(_msgSender()) + _mintAmount;
             uint256 totalSupplyAfterMint = totalSupply() + _mintAmount;
+            uint256 totalCost = _price * _mintAmount;
 
-            if (totalSupplyAfterMint > TOTAL_SUPPLY) {
+            if (
+                totalBalanceAfterMint > MAX_TOKEN_PER_WALLET || totalSupplyAfterMint > TOTAL_SUPPLY
+            ) {
                 revert WhoIsWho__MaxMint();
             }
-
-            uint256 totalCost = _price * _mintAmount;
 
             if (msg.value < totalCost) {
                 revert WhoIsWho__InsufficientFunds();
@@ -197,7 +210,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PRESALE_OG)
-        mintCompliance(_mintAmount, PRESALE_PRICE_OG, MAX_TOKEN_PER_OG_WALLET)
+        mintCompliance(_mintAmount, PRESALE_PRICE_OG, PRESALE_MAX_MINT_OG)
     {
         if (hasOgClaimed[_msgSender()]) {
             revert WhoIsWho__AlreadyClaimed();
@@ -221,7 +234,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PRESALE_WL)
-        mintCompliance(_mintAmount, PRESALE_PRICE_WL, MAX_TOKEN_PER_WALLET)
+        mintCompliance(_mintAmount, PRESALE_PRICE_WL, PRESALE_MAX_MINT_WL)
     {
         if (hasWlClaimed[_msgSender()]) {
             revert WhoIsWho__AlreadyClaimed();
@@ -244,7 +257,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         payable
         nonReentrant
         stageCompliance(SaleStage.PUBLIC_SALE)
-        mintCompliance(_mintAmount, price, MAX_TOKEN_PER_WALLET)
+        mintCompliance(_mintAmount, price, PUBLIC_MAX_MINT)
     {
         _safeMint(_msgSender(), _mintAmount);
     }
@@ -287,7 +300,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         uint64 interval;
 
         /**
-         * @dev Overflow is impossible because `presaleDate` is determined by the admin and
+         * @dev Overflow is impossible because `presaleDate` is set by the admin and
          * `PRESALE_INTERVAL` is a constant
          */
         unchecked {
