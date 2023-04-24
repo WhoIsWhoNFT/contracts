@@ -13,11 +13,10 @@ pragma solidity ^0.8.9;
 ///
 /// wagmi
 
-import "erc721a/contracts/ERC721A.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./ERC721Base.sol";
 
 error WhoIsWho__ZeroMintAmount();
 error WhoIsWho__MaxMint();
@@ -26,7 +25,7 @@ error WhoIsWho__StageNotReady();
 error WhoIsWho__InvalidProof();
 error WhoIsWho__NonExistentTokenId();
 
-contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
+contract WhoIsWhoERC721 is ERC721Base, ReentrancyGuard {
     using Strings for uint256;
 
     enum SaleStage {
@@ -127,7 +126,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         bytes32 _ogMerkleRoot,
         bytes32 _wlMerkleRoot,
         string memory _metadataBaseURI
-    ) ERC721A("Who Is Who", "WhoIsWho") {
+    ) ERC721Base("Who Is Who", "WhoIsWho") {
         price = _price;
         maxTokenPerWallet = _maxTokenPerWallet;
         ogMerkleRoot = _ogMerkleRoot;
@@ -142,7 +141,12 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         publicSaleDate = _publicSaleDate;
         revealDate = _revealDate;
 
-        _safeMint(_msgSender(), RESERVED_TOKENS);
+        for (uint256 i = 0; i < RESERVED_TOKENS; ) {
+            safeMint(_msgSender());
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     ///////////////////////////////////////////////
@@ -245,7 +249,13 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         if (!MerkleProof.verify(_merkleProof, ogMerkleRoot, leaf)) {
             revert WhoIsWho__InvalidProof();
         }
-        _safeMint(_msgSender(), _mintAmount);
+
+        for (uint256 i = 0; i < _mintAmount; ) {
+            safeMint(_msgSender());
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     function wlMint(
@@ -264,7 +274,13 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         if (!MerkleProof.verify(_merkleProof, wlMerkleRoot, leaf)) {
             revert WhoIsWho__InvalidProof();
         }
-        _safeMint(_msgSender(), _mintAmount);
+
+        for (uint256 i = 0; i < _mintAmount; ) {
+            safeMint(_msgSender());
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     function mint(
@@ -278,7 +294,13 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         mintComplianceForPublicSale(_mintAmount)
         mintPriceCompliance(_mintAmount, price)
     {
-        _safeMint(_msgSender(), _mintAmount);
+        for (uint256 i = 0; i < _mintAmount; ) {
+            publicSaleBalances[_msgSender()]++;
+            safeMint(_msgSender());
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     function tokenURI(uint256 _tokenId) public view virtual override returns (string memory) {
@@ -363,7 +385,10 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     //////////////////////////////////////////////
 
     function mint(address _recipient, uint256 _mintAmount) external payable onlyOwner {
-        _safeMint(_recipient, _mintAmount);
+        for (uint256 i = 0; i < _mintAmount; ) {
+            safeMint(_recipient);
+            ++i;
+        }
     }
 
     function setPrice(uint256 _price) external onlyOwner {
