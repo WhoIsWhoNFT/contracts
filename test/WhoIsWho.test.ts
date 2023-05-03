@@ -1,6 +1,6 @@
 import chai, { expect } from 'chai';
 import ChaiAsPromised from 'chai-as-promised';
-import { Contract, utils } from 'ethers';
+import { BigNumber, Contract, utils } from 'ethers';
 import { ethers } from 'hardhat';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import { CollectionConfig, CollectionArguments } from '../config/collection.config';
@@ -8,6 +8,15 @@ import keccak256 from 'keccak256';
 import { MerkleTree } from 'merkletreejs';
 
 chai.use(ChaiAsPromised);
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+function getRole(name: string) {
+  if (!name || name === 'DEFAULT_ADMIN_ROLE') {
+    return ZERO_ADDRESS;
+  }
+  return '0x' + Buffer.from(ethers.utils.solidityKeccak256(['string'], [name]).slice(2), 'hex').toString('hex');
+}
 
 function getPrice(price: number, mintAmount: number | bigint) {
   return utils.parseEther(price.toString()).mul(mintAmount);
@@ -24,7 +33,7 @@ async function timeTravel(travelTo: number) {
 }
 
 describe(`${CollectionConfig.contractName} test suite`, function () {
-  let [owner, minter, minter2, minter3, minter4]: SignerWithAddress[] = [];
+  let [owner, minter, minter2, minter3, minter4, operator1, operator2]: SignerWithAddress[] = [];
   let contract: Contract;
   let ogListedSigners: SignerWithAddress[];
   let whitelistedSigners: SignerWithAddress[];
@@ -34,7 +43,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
 
   before(async function () {
     const signers = await ethers.getSigners();
-    [owner, minter, minter2, minter3, minter4] = signers;
+    [owner, minter, minter2, minter3, minter4, operator1, operator2] = signers;
 
     // Get 3 hardhat test OG addresses starting from 7th index
     ogListedSigners = signers.slice(7, 10);
@@ -106,7 +115,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       // Should time travel to presale date
       await timeTravel(CollectionConfig.presale.date);
 
-      // OG Mint #1
+      /*********************** OG Minter #1 **********************/
+
       let currentTotalSupply = parseInt(await contract.totalSupply());
 
       await contract
@@ -121,13 +131,20 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         expect(await contract.ownerOf(i)).to.equal(ogListedSigners[0].address);
       }
 
-      // OG Mint #2
+      /*********************** OG Minter #2 **********************/
+
       currentTotalSupply = parseInt(await contract.totalSupply());
 
       await contract
         .connect(ogListedSigners[1])
-        .ogMint(CollectionConfig.presale.og.maxTokenPerWallet, getProof(ogMerkleTree, ogListedSigners[1].address), {
-          value: getPrice(CollectionConfig.presale.og.price, CollectionConfig.presale.og.maxTokenPerWallet)
+        .ogMint(CollectionConfig.presale.og.maxTokenPerWallet - 1, getProof(ogMerkleTree, ogListedSigners[1].address), {
+          value: getPrice(CollectionConfig.presale.og.price, CollectionConfig.presale.og.maxTokenPerWallet - 1)
+        });
+
+      await contract
+        .connect(ogListedSigners[1])
+        .ogMint(CollectionConfig.presale.og.maxTokenPerWallet - 2, getProof(ogMerkleTree, ogListedSigners[1].address), {
+          value: getPrice(CollectionConfig.presale.og.price, CollectionConfig.presale.og.maxTokenPerWallet - 2)
         });
 
       totalSupplyAfter = currentTotalSupply + CollectionConfig.presale.og.maxTokenPerWallet;
@@ -136,7 +153,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         expect(await contract.ownerOf(i)).to.equal(ogListedSigners[1].address);
       }
 
-      // Check balances
+      /*********************** Check balances **********************/
+
       expect(await contract.balanceOf(ogListedSigners[0].address)).to.equal(
         CollectionConfig.presale.og.maxTokenPerWallet
       );
@@ -173,6 +191,19 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
+
+    it('should revert second transaction when second transaction will maxed the OG wallet', async function () {
+      await contract.connect(ogListedSigners[2]).ogMint(1, getProof(ogMerkleTree, ogListedSigners[2].address), {
+        value: getPrice(CollectionConfig.presale.og.price, 1)
+      });
+      await expect(
+        contract
+          .connect(ogListedSigners[2])
+          .ogMint(CollectionConfig.presale.og.maxTokenPerWallet, getProof(ogMerkleTree, ogListedSigners[2].address), {
+            value: getPrice(CollectionConfig.presale.og.price, CollectionConfig.presale.og.maxTokenPerWallet)
+          })
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
+    });
   });
 
   describe('#Presale (WL)', async function () {
@@ -197,7 +228,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       // Should time travel
       await timeTravel(CollectionConfig.presale.date + CollectionConfig.presaleInterval);
 
-      // WL Mint #1
+      /*********************** WL Minter #1 **********************/
+
       let currentTotalSupply = parseInt(await contract.totalSupply());
 
       await contract
@@ -212,7 +244,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         expect(await contract.ownerOf(i)).to.equal(whitelistedSigners[0].address);
       }
 
-      // WL Mint #2
+      /*********************** WL Minter #2 **********************/
+
       currentTotalSupply = parseInt(await contract.totalSupply());
 
       await contract
@@ -227,7 +260,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         expect(await contract.ownerOf(i)).to.equal(whitelistedSigners[1].address);
       }
 
-      // Check balances
+      /*********************** Check balances **********************/
+
       expect(await contract.balanceOf(whitelistedSigners[0].address)).to.equal(
         CollectionConfig.presale.wl.maxTokenPerWallet
       );
@@ -266,6 +300,23 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         contract.connect(whitelistedSigners[2]).wlMint(100, getProof(wlMerkleTree, whitelistedSigners[2].address), {
           value: getPrice(CollectionConfig.presale.wl.price, 100)
         })
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
+    });
+
+    it('should revert second transaction when second transaction will maxed the WL wallet', async function () {
+      await contract.connect(whitelistedSigners[2]).wlMint(1, getProof(wlMerkleTree, whitelistedSigners[2].address), {
+        value: getPrice(CollectionConfig.presale.wl.price, 1)
+      });
+      await expect(
+        contract
+          .connect(whitelistedSigners[2])
+          .wlMint(
+            CollectionConfig.presale.wl.maxTokenPerWallet,
+            getProof(wlMerkleTree, whitelistedSigners[2].address),
+            {
+              value: getPrice(CollectionConfig.presale.wl.price, CollectionConfig.presale.wl.maxTokenPerWallet)
+            }
+          )
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
   });
@@ -333,15 +384,24 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         expect(await contract.ownerOf(i)).to.equal(minter3.address);
       }
 
-      // Check balances
+      /*********************** Check balances **********************/
+
       expect(await contract.balanceOf(minter.address)).to.equal(5);
       expect(await contract.balanceOf(minter2.address)).to.equal(5);
       expect(await contract.balanceOf(minter3.address)).to.equal(5);
     });
 
+    it('should revert when minter tries to mint again where minter has already maxed their wallet', async function () {
+      await expect(
+        contract.connect(minter3).functions['mint(uint256)'](CollectionConfig.publicSale.maxTokenPerWallet, {
+          value: getPrice(CollectionConfig.publicSale.price, CollectionConfig.publicSale.maxTokenPerWallet)
+        })
+      ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
+    });
+
     it('should revert when minter tries to mint more than the allowed total token per wallet', async function () {
       await expect(
-        contract.connect(minter3).functions['mint(uint256)'](100, {
+        contract.connect(minter4).functions['mint(uint256)'](100, {
           value: getPrice(CollectionConfig.publicSale.price, 100)
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
@@ -368,6 +428,82 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
           value: getPrice(CollectionConfig.publicSale.price, 100)
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
+    });
+  });
+
+  describe('#Multi Confirm', async function () {
+    it('should set base uri', async function () {
+      await contract.setMetadataBaseURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/');
+      expect(await contract.tokenURI(1)).to.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json');
+    });
+
+    it('should revert when non operator submit a transaction', async function () {
+      const balance = await ethers.provider.getBalance(contract.address);
+      await expect(
+        contract.connect(minter).submitWithdrawTransaction(owner.address, balance, ethers.utils.formatBytes32String(''))
+      ).to.be.reverted;
+    });
+
+    it('should grant operator role', async function () {
+      await contract.grantRole(getRole('OPERATOR_ROLE'), operator1.address);
+      await contract.grantRole(getRole('OPERATOR_ROLE'), operator2.address);
+    });
+
+    it('should submit transaction', async function () {
+      const balance = await ethers.provider.getBalance(contract.address);
+      await contract
+        .connect(operator1)
+        .submitWithdrawTransaction(owner.address, balance, ethers.utils.formatBytes32String(''));
+      const transaction = await contract.getTransaction(0);
+
+      expect(transaction.to).to.equal(owner.address.toString());
+      expect(transaction.value).to.equal(balance);
+      expect(transaction.data).to.equal(ZERO_ADDRESS);
+      expect(transaction.executed).to.false;
+      expect(transaction.numConfirmations).to.equal(0);
+    });
+
+    it("should revert confirmation when transaction doesn't exists", async function () {
+      await expect(contract.connect(operator1).confirmWithdrawTransaction(1)).to.be.rejectedWith("tx doesn't exists");
+    });
+
+    it('should revert transaction when non operator confirms the transaction', async function () {
+      await expect(contract.connect(minter).confirmWithdrawTransaction(0)).to.be.reverted;
+    });
+
+    it('should confirm transaction', async function () {
+      await contract.connect(operator1).confirmWithdrawTransaction(0);
+      await contract.connect(operator2).confirmWithdrawTransaction(0);
+      const transaction = await contract.getTransaction(0);
+      expect(transaction.numConfirmations).to.equal(2);
+    });
+
+    it('should revert when operator already confirmed the transaction', async function () {
+      await expect(contract.connect(operator1).confirmWithdrawTransaction(0)).to.be.rejectedWith(
+        'tx already confirmed'
+      );
+    });
+
+    it('should revert transaction when # of confirmations is insufficient', async function () {
+      await expect(contract.connect(operator1).withdraw(0)).to.be.rejectedWith("tx can't execute");
+    });
+
+    it('should withdraw without errors', async function () {
+      await contract.connect(owner).confirmWithdrawTransaction(0);
+
+      const transaction = await contract.getTransaction(0);
+      const ownerPrevBalance = await ethers.provider.getBalance(transaction.to);
+
+      await contract.connect(operator1).withdraw(0);
+
+      const transactionValue = ethers.BigNumber.from(transaction.value);
+      const afterBalance = ownerPrevBalance.add(transactionValue);
+
+      expect(await ethers.provider.getBalance(transaction.to)).to.equal(afterBalance);
+      expect(await ethers.provider.getBalance(contract.address)).to.equal(0);
+
+      const executedTransaction = await contract.getTransaction(0);
+      expect(executedTransaction.executed).to.true;
     });
   });
 });

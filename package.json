@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
-    "lint": "solhint 'contracts/*.sol'"
+    "lint": "solhint 'contracts/*.sol'",
+    "toolbox": "docker run -it -v $PWD:/src trailofbits/eth-security-toolbox",
+    "slither": "slither . --solc-remaps '@openzeppelin=node_modules/@openzeppelin erc721a=node_modules/erc721a' --exclude naming-convention,external-function,low-level-calls"
   },
   "keywords": [],
   "author": "",

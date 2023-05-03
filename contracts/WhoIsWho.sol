@@ -17,7 +17,8 @@ import "erc721a/contracts/ERC721A.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./MultiConfirm.sol";
 
 error WhoIsWho__ZeroMintAmount();
 error WhoIsWho__MaxMint();
@@ -26,7 +27,7 @@ error WhoIsWho__StageNotReady();
 error WhoIsWho__InvalidProof();
 error WhoIsWho__NonExistentTokenId();
 
-contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
+contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     using Strings for uint256;
 
     enum SaleStage {
@@ -39,6 +40,9 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     ///////////////////////////////////////////////
     /// Constants
     //////////////////////////////////////////////
+
+    /// Operator role
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     /// Presale price for OG members
     uint256 public constant PRESALE_PRICE_OG = 0.025 ether;
@@ -126,8 +130,9 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         uint64 _revealDate,
         bytes32 _ogMerkleRoot,
         bytes32 _wlMerkleRoot,
+        address[] memory _operators,
         string memory _metadataBaseURI
-    ) ERC721A("Who Is Who", "WhoIsWho") {
+    ) ERC721A("Who Is Who", "WhoIsWho") MultiConfirm(_operators) {
         price = _price;
         maxTokenPerWallet = _maxTokenPerWallet;
         ogMerkleRoot = _ogMerkleRoot;
@@ -141,6 +146,13 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         presaleDate = _presaleDate;
         publicSaleDate = _publicSaleDate;
         revealDate = _revealDate;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _grantRole(OPERATOR_ROLE, _msgSender());
+
+        for (uint256 i = 0; i < _operators.length; i++) {
+            _grantRole(OPERATOR_ROLE, _operators[i]);
+        }
 
         _safeMint(_msgSender(), RESERVED_TOKENS);
     }
@@ -278,6 +290,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         mintComplianceForPublicSale(_mintAmount)
         mintPriceCompliance(_mintAmount, price)
     {
+        publicSaleBalances[_msgSender()] = publicSaleBalances[_msgSender()] + _mintAmount;
         _safeMint(_msgSender(), _mintAmount);
     }
 
@@ -287,23 +300,13 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         }
 
         if (!isReveal()) {
-            return hiddenMetadataUri();
+            return getHiddenMetadataUri();
         }
 
         string memory currentBaseURI = _baseURI();
 
         if (bytes(currentBaseURI).length > 0) {
             return string(abi.encodePacked(currentBaseURI, _tokenId.toString(), ".json"));
-        }
-
-        return "";
-    }
-
-    function hiddenMetadataUri() public view returns (string memory) {
-        string memory currentBaseURI = _baseURI();
-
-        if (bytes(currentBaseURI).length > 0) {
-            return string(abi.encodePacked(currentBaseURI, "hidden.json"));
         }
 
         return "";
@@ -325,7 +328,7 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         unchecked {
             /**
              * @dev Adding `PRESALE_INTERVAL` to the presale date, it means that the minting
-             * timeframe for OG members has come to an end
+             * timeframe for OG members has elapsed
              */
             interval = presaleDate + PRESALE_INTERVAL;
         }
@@ -335,9 +338,9 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
         }
 
         /**
-         * @dev During presale, OG members will have priority access to minting their
+         * @notice During presale, OG members will have the first access to minting their
          * tokens, followed by whitelist members who can start minting only after a
-         * specified time period defined in `PRESALE_INTERVAL` has elapsed
+         * specified time period defined in `PRESALE_INTERVAL`
          */
         if (timeNow >= presaleDate) {
             return SaleStage.PRESALE_OG;
@@ -350,6 +353,16 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     /// Internal methods
     //////////////////////////////////////////////
 
+    function getHiddenMetadataUri() internal view returns (string memory) {
+        string memory currentBaseURI = _baseURI();
+
+        if (bytes(currentBaseURI).length > 0) {
+            return string(abi.encodePacked(currentBaseURI, "hidden.json"));
+        }
+
+        return "";
+    }
+
     function isReveal() internal view returns (bool) {
         return uint64(block.timestamp) >= revealDate;
     }
@@ -359,63 +372,88 @@ contract WhoIsWho is ERC721A, Ownable, ReentrancyGuard {
     }
 
     ///////////////////////////////////////////////
-    /// Admin methods
+    /// Operator methods
     //////////////////////////////////////////////
 
-    function mint(address _recipient, uint256 _mintAmount) external payable onlyOwner {
+    function mint(address _recipient, uint256 _mintAmount) external payable onlyRole(OPERATOR_ROLE) {
         _safeMint(_recipient, _mintAmount);
     }
 
-    function setPrice(uint256 _price) external onlyOwner {
+    function setPrice(uint256 _price) external onlyRole(OPERATOR_ROLE) {
         price = _price;
         emit SetPrice(_price);
     }
 
-    function setMaxTokenPerWallet(uint32 _maxTokenPerWallet) external onlyOwner {
+    function setMaxTokenPerWallet(uint32 _maxTokenPerWallet) external onlyRole(OPERATOR_ROLE) {
         maxTokenPerWallet = _maxTokenPerWallet;
         emit SetMaxTokenPerWallet(_maxTokenPerWallet);
     }
 
-    function setMetadataBaseURI(string memory _uri) external onlyOwner {
+    function setMetadataBaseURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
         metadataBaseURI = _uri;
         emit SetMetadataBaseURI(_uri);
     }
 
-    function setOgMerkleRoot(bytes32 _merkleRoot) external onlyOwner stageCompliance(SaleStage.IDLE) {
+    function setOgMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         ogMerkleRoot = _merkleRoot;
         emit SetOgMerkleRoot(_merkleRoot);
     }
 
-    function setWlMerkleRoot(bytes32 _merkleRoot) external onlyOwner stageCompliance(SaleStage.IDLE) {
+    function setWlMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         wlMerkleRoot = _merkleRoot;
         emit SetWlMerkleRoot(_merkleRoot);
     }
 
-    function setPresaleDate(uint64 _date) external onlyOwner stageCompliance(SaleStage.IDLE) {
+    function setPresaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         presaleDate = _date;
         emit SetPresaleDate(_date);
     }
 
-    function setPublicSaleDate(uint64 _date) external onlyOwner stageCompliance(SaleStage.IDLE) {
+    function setPublicSaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         publicSaleDate = _date;
         emit SetPublicSaleDate(_date);
     }
 
-    function setRevealDate(uint64 _date) external onlyOwner {
+    function setRevealDate(uint64 _date) external onlyRole(OPERATOR_ROLE) {
         revealDate = _date;
         emit SetRevealDate(_date);
     }
 
-    /**
-     * @notice (1) Owner should set the base uri for the collection, (2) stage should be
-     * already at the public sale, (3) and lastly, the approvers should approve the withdrawal
-     * before the owner can withdraw all the funds
-     */
-    function withdraw() external onlyOwner stageCompliance(SaleStage.PUBLIC_SALE) {
+    function submitWithdrawTransaction(
+        address _to,
+        uint _value,
+        bytes memory _data
+    ) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
+        /// @inheritdoc `MultiConfirm.sol`
+        _submitTransaction(_to, _value, _data);
+    }
+
+    function confirmWithdrawTransaction(
+        uint256 _txIndex
+    ) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
+        /// @inheritdoc `MultiConfirm.sol`
+        _confirmTransaction(_txIndex);
+    }
+
+    function revokeConfirmation(
+        uint256 _txIndex
+    ) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
+        /// @inheritdoc `MultiConfirm.sol`
+        _revokeConfirmation(_txIndex);
+    }
+
+    function withdraw(uint256 _txIndex) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
         string memory currentBaseURI = _baseURI();
         require(bytes(currentBaseURI).length > 0, "Base URI not set");
-        (bool os, ) = payable(owner()).call{value: address(this).balance}("");
-        require(os, "Transfer failed");
-        emit Withdraw(block.timestamp, address(this).balance);
+
+        /// @inheritdoc `MultiConfirm.sol`
+        _executeTransaction(_txIndex);
+    }
+
+    /**
+     * @dev Override `supportsInterface`
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721A, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

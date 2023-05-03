@@ -347,7 +347,7 @@ contract WhoIsWhoERC721 is ERC721Base, ReentrancyGuard {
         unchecked {
             /**
              * @dev Adding `PRESALE_INTERVAL` to the presale date, it means that the minting
-             * timeframe for OG members has come to an end
+             * timeframe for OG members has elapsed
              */
             interval = presaleDate + PRESALE_INTERVAL;
         }
@@ -357,9 +357,9 @@ contract WhoIsWhoERC721 is ERC721Base, ReentrancyGuard {
         }
 
         /**
-         * @dev During presale, OG members will have priority access to minting their
+         * @dev During presale, OG members will have the first access to minting their
          * tokens, followed by whitelist members who can start minting only after a
-         * specified time period defined in `PRESALE_INTERVAL` has elapsed
+         * specified time period defined in `PRESALE_INTERVAL`
          */
         if (timeNow >= presaleDate) {
             return SaleStage.PRESALE_OG;
@@ -385,6 +385,8 @@ contract WhoIsWhoERC721 is ERC721Base, ReentrancyGuard {
     //////////////////////////////////////////////
 
     function mint(address _recipient, uint256 _mintAmount) external payable onlyOwner {
+        publicSaleBalances[_msgSender()] = publicSaleBalances[_msgSender()] + _mintAmount;
+
         for (uint256 i = 0; i < _mintAmount; ) {
             safeMint(_recipient);
             ++i;
@@ -431,11 +433,6 @@ contract WhoIsWhoERC721 is ERC721Base, ReentrancyGuard {
         emit SetRevealDate(_date);
     }
 
-    /**
-     * @notice (1) Owner should set the base uri for the collection, (2) stage should be
-     * already at the public sale, (3) and lastly, the approvers should approve the withdrawal
-     * before the owner can withdraw all the funds
-     */
     function withdraw() external onlyOwner stageCompliance(SaleStage.PUBLIC_SALE) {
         string memory currentBaseURI = _baseURI();
         require(bytes(currentBaseURI).length > 0, "Base URI not set");

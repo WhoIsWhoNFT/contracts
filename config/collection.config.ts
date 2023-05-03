@@ -35,5 +35,6 @@ export const CollectionArguments = [
   CollectionConfig.revealDate,
   utils.formatBytes32String(''),
   utils.formatBytes32String(''),
+  [process.env.OPERATOR_1_ADDRESS, process.env.OPERATOR_2_ADDRESS, process.env.OPERATOR_3_ADDRESS],
   ''
 ];
