@@ -33,7 +33,7 @@ async function timeTravel(travelTo: number) {
 }
 
 describe(`${CollectionConfig.contractName} test suite`, function () {
-  let [owner, minter, minter2, minter3, minter4, operator1, operator2]: SignerWithAddress[] = [];
+  let [deployer, minter, minter2, minter3, minter4, operator1, operator2, owner]: SignerWithAddress[] = [];
   let contract: Contract;
   let ogListedSigners: SignerWithAddress[];
   let whitelistedSigners: SignerWithAddress[];
@@ -43,13 +43,13 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
 
   before(async function () {
     const signers = await ethers.getSigners();
-    [owner, minter, minter2, minter3, minter4, operator1, operator2] = signers;
+    [deployer, minter, minter2, minter3, minter4, operator1, operator2, owner] = signers;
 
-    // Get 3 hardhat test OG addresses starting from 7th index
-    ogListedSigners = signers.slice(7, 10);
+    // Get 3 hardhat test OG addresses starting from 8th index
+    ogListedSigners = signers.slice(8, 11);
 
-    // Get 10 hardhat addresses starting from 10th index
-    whitelistedSigners = signers.slice(10, 22);
+    // Get 9 hardhat addresses starting from 11th index
+    whitelistedSigners = signers.slice(11, 20);
   });
 
   describe('#Deployment', async function () {
@@ -59,18 +59,22 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       await contract.deployed();
     });
 
+    it('should owner is the default admin', async function () {
+      expect(await contract.hasRole(getRole('DEFAULT_ADMIN_ROLE'), owner.address)).to.be.true;
+    });
+
     it('should build merkle tree and update root hash', async function () {
       // Build merkle tree for OG
       const ogLeafNodes = ogListedSigners.map((addr) => keccak256(addr.address));
       ogMerkleTree = new MerkleTree(ogLeafNodes, keccak256, { sortPairs: true });
       const ogRootHash = ogMerkleTree.getRoot();
-      await (await contract.setOgMerkleRoot('0x' + ogRootHash.toString('hex'))).wait();
+      await (await contract.connect(owner).setOgMerkleRoot('0x' + ogRootHash.toString('hex'))).wait();
 
       // Build merkle tree for WL
       const wlLeafNodes = whitelistedSigners.map((addr) => keccak256(addr.address));
       wlMerkleTree = new MerkleTree(wlLeafNodes, keccak256, { sortPairs: true });
       const wlRootHash = wlMerkleTree.getRoot();
-      await (await contract.setWlMerkleRoot('0x' + wlRootHash.toString('hex'))).wait();
+      await (await contract.connect(owner).setWlMerkleRoot('0x' + wlRootHash.toString('hex'))).wait();
     });
 
     it('should return exact initial data for storage', async function () {
@@ -92,7 +96,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       expect(await contract.metadataBaseURI()).to.equal(CollectionConfig.metadataBaseURI);
     });
 
-    it('should owner own all reserved tokens', async function () {
+    it('should owner own all the reserved tokens', async function () {
       const currentTotalSupply = parseInt(await contract.totalSupply());
       for (let i = 0; i < currentTotalSupply; i++) {
         expect(await contract.ownerOf(i)).to.equal(owner.address);
@@ -433,7 +437,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
 
   describe('#Multi Confirm', async function () {
     it('should set base uri', async function () {
-      await contract.setMetadataBaseURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/');
+      await contract.connect(owner).setMetadataBaseURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/');
       expect(await contract.tokenURI(1)).to.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json');
     });
 
@@ -445,8 +449,8 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
     });
 
     it('should grant operator role', async function () {
-      await contract.grantRole(getRole('OPERATOR_ROLE'), operator1.address);
-      await contract.grantRole(getRole('OPERATOR_ROLE'), operator2.address);
+      await contract.connect(owner).grantRole(getRole('OPERATOR_ROLE'), operator1.address);
+      await contract.connect(owner).grantRole(getRole('OPERATOR_ROLE'), operator2.address);
     });
 
     it('should submit transaction', async function () {
@@ -485,7 +489,13 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
     });
 
     it('should revert transaction when # of confirmations is insufficient', async function () {
-      await expect(contract.connect(operator1).withdraw(0)).to.be.rejectedWith("tx can't execute");
+      await expect(contract.connect(owner).withdraw(0)).to.be.rejectedWith("tx can't execute");
+    });
+
+    it('should revert when operator or any other wallet address tries to withdraw', async function () {
+      await expect(contract.connect(operator1).withdraw(0)).to.be.reverted;
+      await expect(contract.connect(deployer).withdraw(0)).to.be.reverted;
+      await expect(contract.connect(minter).withdraw(0)).to.be.reverted;
     });
 
     it('should withdraw without errors', async function () {
@@ -494,12 +504,15 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       const transaction = await contract.getTransaction(0);
       const ownerPrevBalance = await ethers.provider.getBalance(transaction.to);
 
-      await contract.connect(operator1).withdraw(0);
+      await contract.connect(owner).withdraw(0);
 
       const transactionValue = ethers.BigNumber.from(transaction.value);
       const afterBalance = ownerPrevBalance.add(transactionValue);
 
-      expect(await ethers.provider.getBalance(transaction.to)).to.equal(afterBalance);
+      const txValueEth = ethers.utils.formatEther(await ethers.provider.getBalance(transaction.to));
+      const afterBalEth = ethers.utils.formatEther(afterBalance);
+
+      expect(parseFloat(txValueEth).toFixed(2)).to.equal(parseFloat(afterBalEth).toFixed(2));
       expect(await ethers.provider.getBalance(contract.address)).to.equal(0);
 
       const executedTransaction = await contract.getTransaction(0);

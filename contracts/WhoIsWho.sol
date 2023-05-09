@@ -123,6 +123,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     //////////////////////////////////////////////
 
     constructor(
+        address _owner,
         uint256 _price,
         uint32 _maxTokenPerWallet,
         uint64 _presaleDate,
@@ -147,14 +148,16 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         publicSaleDate = _publicSaleDate;
         revealDate = _revealDate;
 
-        _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _grantRole(OPERATOR_ROLE, _msgSender());
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
 
         for (uint256 i = 0; i < _operators.length; i++) {
             _grantRole(OPERATOR_ROLE, _operators[i]);
         }
 
-        _safeMint(_msgSender(), RESERVED_TOKENS);
+        /// @dev Owner's address should be included in the operators array
+        require(hasRole(OPERATOR_ROLE, _owner), "owner should be an operator");
+
+        _safeMint(_owner, RESERVED_TOKENS);
     }
 
     ///////////////////////////////////////////////
@@ -290,7 +293,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         mintComplianceForPublicSale(_mintAmount)
         mintPriceCompliance(_mintAmount, price)
     {
-        publicSaleBalances[_msgSender()] = publicSaleBalances[_msgSender()] + _mintAmount;
+        publicSaleBalances[_msgSender()] += _mintAmount;
         _safeMint(_msgSender(), _mintAmount);
     }
 
@@ -442,7 +445,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         _revokeConfirmation(_txIndex);
     }
 
-    function withdraw(uint256 _txIndex) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
+    function withdraw(uint256 _txIndex) external onlyRole(DEFAULT_ADMIN_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
         string memory currentBaseURI = _baseURI();
         require(bytes(currentBaseURI).length > 0, "Base URI not set");
 

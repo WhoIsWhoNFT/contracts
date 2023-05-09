@@ -28,6 +28,7 @@ export const CollectionConfig = {
 };
 
 export const CollectionArguments = [
+  process.env.ADMIN_ADDRESS,
   utils.parseEther(CollectionConfig.publicSale.price.toString()),
   CollectionConfig.publicSale.maxTokenPerWallet,
   CollectionConfig.presale.date,
@@ -35,6 +36,6 @@ export const CollectionArguments = [
   CollectionConfig.revealDate,
   utils.formatBytes32String(''),
   utils.formatBytes32String(''),
-  [process.env.OPERATOR_1_ADDRESS, process.env.OPERATOR_2_ADDRESS, process.env.OPERATOR_3_ADDRESS],
+  [process.env.OPERATOR_1_ADDRESS, process.env.OPERATOR_2_ADDRESS, process.env.ADMIN_ADDRESS],
   ''
 ];
