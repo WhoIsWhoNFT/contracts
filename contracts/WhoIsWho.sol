@@ -91,7 +91,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     bytes32 public wlMerkleRoot;
 
     /// Metadata URI
-    string public metadataBaseURI;
+    string private metadataBaseURI;
 
     /// Owner's balance during public sale
     mapping(address => uint256) public publicSaleBalances;
@@ -350,6 +350,10 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         }
 
         return SaleStage.IDLE;
+    }
+
+    function getPublicSaleBalance(address _account) public view returns (uint256) {
+        return publicSaleBalances[_account];
     }
 
     ///////////////////////////////////////////////
