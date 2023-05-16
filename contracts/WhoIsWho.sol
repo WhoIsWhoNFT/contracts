@@ -17,6 +17,7 @@ import "erc721a/contracts/ERC721A.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./MultiConfirm.sol";
 
@@ -27,7 +28,7 @@ error WhoIsWho__StageNotReady();
 error WhoIsWho__InvalidProof();
 error WhoIsWho__NonExistentTokenId();
 
-contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
+contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGuard {
     using Strings for uint256;
 
     enum SaleStage {
@@ -45,7 +46,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     /// Presale price for OG members
-    uint256 public constant PRESALE_PRICE_OG = 0.025 ether;
+    uint256 public constant PRESALE_PRICE_OG = 0.02 ether;
 
     /// Presale price for whitelist members
     uint256 public constant PRESALE_PRICE_WL = 0.025 ether;
@@ -90,8 +91,14 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     /// Merkle roots for whitelist members
     bytes32 public wlMerkleRoot;
 
+    /// Contract URI
+    string public contractURI;
+
     /// Metadata URI
     string private metadataBaseURI;
+
+    /// Hidden token URI
+    string private hiddenTokenURI;
 
     /// Owner's balance during public sale
     mapping(address => uint256) public publicSaleBalances;
@@ -104,7 +111,11 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
 
     event SetMaxTokenPerWallet(uint256 indexed _maxTokenPerWallet);
 
+    event SetContractURI(string indexed _uri);
+
     event SetMetadataBaseURI(string indexed _uri);
+
+    event SetHiddenTokenURI(string indexed _uri);
 
     event SetOgMerkleRoot(bytes32 indexed _merkleRoot);
 
@@ -132,13 +143,15 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         bytes32 _ogMerkleRoot,
         bytes32 _wlMerkleRoot,
         address[] memory _operators,
-        string memory _metadataBaseURI
+        string memory _contractURI,
+        string memory _hiddenTokenURI
     ) ERC721A("Who Is Who", "WhoIsWho") MultiConfirm(_operators) {
         price = _price;
         maxTokenPerWallet = _maxTokenPerWallet;
         ogMerkleRoot = _ogMerkleRoot;
         wlMerkleRoot = _wlMerkleRoot;
-        metadataBaseURI = _metadataBaseURI;
+        contractURI = _contractURI;
+        hiddenTokenURI = _hiddenTokenURI;
 
         /**
          * @notice Initial presale, public, and reveal dates are set during contract's deployment.
@@ -148,8 +161,6 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         publicSaleDate = _publicSaleDate;
         revealDate = _revealDate;
 
-        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
-
         for (uint256 i = 0; i < _operators.length; i++) {
             _grantRole(OPERATOR_ROLE, _operators[i]);
         }
@@ -157,6 +168,12 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         /// @dev Owner's address should be included in the operators array
         require(hasRole(OPERATOR_ROLE, _owner), "owner should be an operator");
 
+        /// Transfer ownership
+        _grantRole(OPERATOR_ROLE, _msgSender());
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _transferOwnership(_owner);
+
+        /// Mint reserved tokens to the owner
         _safeMint(_owner, RESERVED_TOKENS);
     }
 
@@ -165,6 +182,13 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     //////////////////////////////////////////////
     modifier stageCompliance(SaleStage _stage) {
         SaleStage stage = getSaleStage();
+
+        /// @notice Allow OG to mint tokens during whitelist stage
+        if (_stage == SaleStage.PRESALE_OG) {
+            if (stage != SaleStage.PRESALE_OG && stage != SaleStage.PRESALE_WL) {
+                revert WhoIsWho__StageNotReady();
+            }
+        }
 
         if (stage != _stage) {
             revert WhoIsWho__StageNotReady();
@@ -303,7 +327,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         }
 
         if (!isReveal()) {
-            return getHiddenMetadataUri();
+            return hiddenTokenURI;
         }
 
         string memory currentBaseURI = _baseURI();
@@ -360,16 +384,6 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     /// Internal methods
     //////////////////////////////////////////////
 
-    function getHiddenMetadataUri() internal view returns (string memory) {
-        string memory currentBaseURI = _baseURI();
-
-        if (bytes(currentBaseURI).length > 0) {
-            return string(abi.encodePacked(currentBaseURI, "hidden.json"));
-        }
-
-        return "";
-    }
-
     function isReveal() internal view returns (bool) {
         return uint64(block.timestamp) >= revealDate;
     }
@@ -382,45 +396,66 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
     /// Operator methods
     //////////////////////////////////////////////
 
+    /// Allow operator to airdrop token in any sale stage
     function mint(address _recipient, uint256 _mintAmount) external payable onlyRole(OPERATOR_ROLE) {
         _safeMint(_recipient, _mintAmount);
     }
 
+    /// Sets the public price of the token
     function setPrice(uint256 _price) external onlyRole(OPERATOR_ROLE) {
         price = _price;
         emit SetPrice(_price);
     }
 
+    ///  Sets the maximum token per wallet during public sale
     function setMaxTokenPerWallet(uint32 _maxTokenPerWallet) external onlyRole(OPERATOR_ROLE) {
         maxTokenPerWallet = _maxTokenPerWallet;
         emit SetMaxTokenPerWallet(_maxTokenPerWallet);
     }
 
+    /// Sets contract uri for Opensea
+    function setContractURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
+        contractURI = _uri;
+        emit SetContractURI(_uri);
+    }
+
+    /// Sets token medata uri
     function setMetadataBaseURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
         metadataBaseURI = _uri;
         emit SetMetadataBaseURI(_uri);
     }
 
+    /// Sets hidden token uri
+    function setHiddenTokenURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
+        hiddenTokenURI = _uri;
+        emit SetHiddenTokenURI(_uri);
+    }
+
+    /// Sets OG merkle root for lazy minting
     function setOgMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         ogMerkleRoot = _merkleRoot;
         emit SetOgMerkleRoot(_merkleRoot);
     }
 
+    /// Sets WL merkle root for lazy minting
     function setWlMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         wlMerkleRoot = _merkleRoot;
         emit SetWlMerkleRoot(_merkleRoot);
     }
 
+    /// Sets presale date during only in the idle stage
     function setPresaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         presaleDate = _date;
         emit SetPresaleDate(_date);
     }
 
+    /// Sets public sale date during only in the idle stage
     function setPublicSaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
         publicSaleDate = _date;
         emit SetPublicSaleDate(_date);
     }
 
+    /// Sets reveal date
     function setRevealDate(uint64 _date) external onlyRole(OPERATOR_ROLE) {
         revealDate = _date;
         emit SetRevealDate(_date);
@@ -428,7 +463,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
 
     function submitWithdrawTransaction(
         address _to,
-        uint _value,
+        uint256 _value,
         bytes memory _data
     ) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
         /// @inheritdoc `MultiConfirm.sol`
@@ -449,7 +484,10 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         _revokeConfirmation(_txIndex);
     }
 
-    function withdraw(uint256 _txIndex) external onlyRole(DEFAULT_ADMIN_ROLE) stageCompliance(SaleStage.PUBLIC_SALE) {
+    /** @notice The owner can withdraw the funds if the base uri is already set, approved
+     *  by the approvers, and if it's already in the public sale stage
+     */
+    function withdraw(uint256 _txIndex) external onlyOwner stageCompliance(SaleStage.PUBLIC_SALE) {
         string memory currentBaseURI = _baseURI();
         require(bytes(currentBaseURI).length > 0, "Base URI not set");
 
@@ -457,9 +495,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, AccessControl, ReentrancyGuard {
         _executeTransaction(_txIndex);
     }
 
-    /**
-     * @dev Override `supportsInterface`
-     */
+    /// @dev Override `supportsInterface`
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721A, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }

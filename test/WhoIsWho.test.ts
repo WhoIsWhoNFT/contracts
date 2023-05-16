@@ -59,8 +59,9 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       await contract.deployed();
     });
 
-    it('should owner is the default admin', async function () {
+    it("should owner is the default admin and the contract's owner as well", async function () {
       expect(await contract.hasRole(getRole('DEFAULT_ADMIN_ROLE'), owner.address)).to.be.true;
+      expect(await contract.owner()).to.be.equal(owner.address);
     });
 
     it('should build merkle tree and update root hash', async function () {
@@ -93,7 +94,7 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       expect(await contract.presaleDate()).to.equal(CollectionConfig.presale.date);
       expect(await contract.publicSaleDate()).to.equal(CollectionConfig.publicSale.date);
       expect(await contract.revealDate()).to.equal(CollectionConfig.revealDate);
-      expect(await contract.metadataBaseURI()).to.equal(CollectionConfig.metadataBaseURI);
+      expect(await contract.contractURI()).to.equal(CollectionConfig.contractURI);
     });
 
     it('should owner own all the reserved tokens', async function () {
@@ -226,6 +227,12 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
             }
           )
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__StageNotReady');
+    });
+
+    it('should allow OG to mint during whitelist stage', async function () {
+      await contract.connect(ogListedSigners[2]).ogMint(2, getProof(ogMerkleTree, ogListedSigners[2].address), {
+        value: getPrice(2, CollectionConfig.presale.og.maxTokenPerWallet)
+      });
     });
 
     it('should WL mint without errors', async function () {
@@ -433,14 +440,35 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
+
+    it('should set hidden token uri and hide nft before reveal', async function () {
+      await contract
+        .connect(deployer)
+        .setHiddenTokenURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json');
+
+      expect(await contract.tokenURI(1)).to.be.equal(
+        'ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json'
+      );
+    });
+  });
+
+  describe('#Reveal', async function () {
+    it('should set base uri', async function () {
+      await contract.connect(deployer).setMetadataBaseURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/');
+    });
+
+    it('should time travel to reveal date', async function () {
+      await timeTravel(CollectionConfig.revealDate);
+    });
+
+    it('should return correct token uri', async function () {
+      expect(await contract.tokenURI(1)).to.be.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/1.json');
+      expect(await contract.tokenURI(2)).to.be.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/2.json');
+      expect(await contract.tokenURI(3)).to.be.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/3.json');
+    });
   });
 
   describe('#Multi Confirm', async function () {
-    it('should set base uri', async function () {
-      await contract.connect(owner).setMetadataBaseURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/');
-      expect(await contract.tokenURI(1)).to.equal('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json');
-    });
-
     it('should revert when non operator submit a transaction', async function () {
       const balance = await ethers.provider.getBalance(contract.address);
       await expect(
