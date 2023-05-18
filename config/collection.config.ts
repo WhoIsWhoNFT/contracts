@@ -24,22 +24,14 @@ export const CollectionConfig = {
   presaleInterval: 900, // 15 minutes in seconds
   reservedTokens: 50,
   revealDate: 1685131200,
-  metadataBaseURI: '',
-  contractURI: ''
+  metadataBaseURI: ''
 };
 
 const operators = [process.env.OPERATOR_1_ADDRESS, process.env.OPERATOR_2_ADDRESS, process.env.ADMIN_ADDRESS];
 
 export const CollectionArguments = [
   process.env.ADMIN_ADDRESS,
-  utils.parseEther(CollectionConfig.publicSale.price.toString()),
-  CollectionConfig.publicSale.maxTokenPerWallet,
-  CollectionConfig.presale.date,
-  CollectionConfig.publicSale.date,
-  CollectionConfig.revealDate,
-  process.env?.OG_LISTS_MERKLE_ROOT ? `0x${process.env?.OG_LISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
-  process.env?.WL_LISTS_MERKLE_ROOT ? `0x${process.env?.WL_LISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
-  operators,
-  process.env?.CONTRACT_URI ?? '',
-  process.env?.HIDDEN_TOKEN_URI ?? ''
+  process.env?.OGLISTS_MERKLE_ROOT ? `0x${process.env?.OGLISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
+  process.env?.WHITELISTS_MERKLE_ROOT ? `0x${process.env?.WHITELISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
+  operators
 ];

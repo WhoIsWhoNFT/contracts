@@ -55,27 +55,29 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
   describe('#Deployment', async function () {
     it('should deploy', async function () {
       const Contract = await ethers.getContractFactory(CollectionConfig.contractName);
-      contract = await Contract.deploy(...CollectionArguments);
+
+      // Build merkle tree for OG
+      const ogLeafNodes = ogListedSigners.map((addr) => keccak256(addr.address));
+      ogMerkleTree = new MerkleTree(ogLeafNodes, keccak256, { sortPairs: true });
+      const ogRootHash = ogMerkleTree.getRoot();
+
+      // Build merkle tree for WL
+      const wlLeafNodes = whitelistedSigners.map((addr) => keccak256(addr.address));
+      wlMerkleTree = new MerkleTree(wlLeafNodes, keccak256, { sortPairs: true });
+      const wlRootHash = wlMerkleTree.getRoot();
+
+      contract = await Contract.deploy(
+        CollectionArguments[0],
+        '0x' + ogRootHash.toString('hex'),
+        '0x' + wlRootHash.toString('hex'),
+        CollectionArguments[3]
+      );
       await contract.deployed();
     });
 
     it("should owner is the default admin and the contract's owner as well", async function () {
       expect(await contract.hasRole(getRole('DEFAULT_ADMIN_ROLE'), owner.address)).to.be.true;
       expect(await contract.owner()).to.be.equal(owner.address);
-    });
-
-    it('should build merkle tree and update root hash', async function () {
-      // Build merkle tree for OG
-      const ogLeafNodes = ogListedSigners.map((addr) => keccak256(addr.address));
-      ogMerkleTree = new MerkleTree(ogLeafNodes, keccak256, { sortPairs: true });
-      const ogRootHash = ogMerkleTree.getRoot();
-      await (await contract.connect(owner).setOgMerkleRoot('0x' + ogRootHash.toString('hex'))).wait();
-
-      // Build merkle tree for WL
-      const wlLeafNodes = whitelistedSigners.map((addr) => keccak256(addr.address));
-      wlMerkleTree = new MerkleTree(wlLeafNodes, keccak256, { sortPairs: true });
-      const wlRootHash = wlMerkleTree.getRoot();
-      await (await contract.connect(owner).setWlMerkleRoot('0x' + wlRootHash.toString('hex'))).wait();
     });
 
     it('should return exact initial data for storage', async function () {
@@ -89,12 +91,13 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       expect(await contract.PRESALE_INTERVAL()).to.equal(CollectionConfig.presaleInterval);
       expect(await contract.RESERVED_TOKENS()).to.equal(CollectionConfig.reservedTokens);
 
-      expect(await contract.price()).to.equal(utils.parseEther(CollectionConfig.publicSale.price.toString()));
-      expect(await contract.maxTokenPerWallet()).to.equal(CollectionConfig.publicSale.maxTokenPerWallet);
-      expect(await contract.presaleDate()).to.equal(CollectionConfig.presale.date);
-      expect(await contract.publicSaleDate()).to.equal(CollectionConfig.publicSale.date);
-      expect(await contract.revealDate()).to.equal(CollectionConfig.revealDate);
-      expect(await contract.contractURI()).to.equal(CollectionConfig.contractURI);
+      expect(await contract.PUBLIC_SALE_PRICE()).to.equal(
+        utils.parseEther(CollectionConfig.publicSale.price.toString())
+      );
+      expect(await contract.PUBLIC_SALE_MAX_TOKEN()).to.equal(CollectionConfig.publicSale.maxTokenPerWallet);
+      expect(await contract.PRESALE_DATE()).to.equal(CollectionConfig.presale.date);
+      expect(await contract.PUBLIC_SALE_DATE()).to.equal(CollectionConfig.publicSale.date);
+      expect(await contract.REVEAL_DATE()).to.equal(CollectionConfig.revealDate);
     });
 
     it('should owner own all the reserved tokens', async function () {
@@ -201,6 +204,9 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       await contract.connect(ogListedSigners[2]).ogMint(1, getProof(ogMerkleTree, ogListedSigners[2].address), {
         value: getPrice(CollectionConfig.presale.og.price, 1)
       });
+      await contract.connect(ogListedSigners[2]).ogMint(1, getProof(ogMerkleTree, ogListedSigners[2].address), {
+        value: getPrice(CollectionConfig.presale.og.price, 1)
+      });
       await expect(
         contract
           .connect(ogListedSigners[2])
@@ -227,12 +233,6 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
             }
           )
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__StageNotReady');
-    });
-
-    it('should allow OG to mint during whitelist stage', async function () {
-      await contract.connect(ogListedSigners[2]).ogMint(2, getProof(ogMerkleTree, ogListedSigners[2].address), {
-        value: getPrice(2, CollectionConfig.presale.og.maxTokenPerWallet)
-      });
     });
 
     it('should WL mint without errors', async function () {
@@ -280,6 +280,12 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
       expect(await contract.balanceOf(whitelistedSigners[1].address)).to.equal(
         CollectionConfig.presale.wl.maxTokenPerWallet
       );
+    });
+
+    it('should allow OG to mint during whitelist stage', async function () {
+      await contract.connect(ogListedSigners[2]).ogMint(1, getProof(ogMerkleTree, ogListedSigners[2].address), {
+        value: getPrice(CollectionConfig.presale.og.price, 1)
+      });
     });
 
     it('should revert when non WL member tries to mint the NFT', async function () {
@@ -440,16 +446,6 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
         })
       ).to.be.revertedWithCustomError(contract, 'WhoIsWho__MaxMint');
     });
-
-    it('should set hidden token uri and hide nft before reveal', async function () {
-      await contract
-        .connect(deployer)
-        .setHiddenTokenURI('ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json');
-
-      expect(await contract.tokenURI(1)).to.be.equal(
-        'ipfs://QmV5VrfGUpaRRpCVP4pmi9f6dHjwTXnq6Urv9aUmJyRCpv/hidden.json'
-      );
-    });
   });
 
   describe('#Reveal', async function () {
@@ -545,6 +541,13 @@ describe(`${CollectionConfig.contractName} test suite`, function () {
 
       const executedTransaction = await contract.getTransaction(0);
       expect(executedTransaction.executed).to.true;
+    });
+  });
+
+  describe('#Admin Functions', async function () {
+    it('should set customized metadata uri', async function () {
+      await contract.connect(deployer).setCustomMetadataURI(10, 'https://customised-url.com');
+      expect(await contract.tokenURI(10)).to.be.equal('https://customised-url.com');
     });
   });
 });

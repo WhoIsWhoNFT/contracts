@@ -51,11 +51,23 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
     /// Presale price for whitelist members
     uint256 public constant PRESALE_PRICE_WL = 0.025 ether;
 
+    /// Public sale price
+    uint256 public constant PUBLIC_SALE_PRICE = 0.025 ether;
+
+    /// Presale date - Friday, May 19, 2023 3:00 PM GMT
+    uint64 public constant PRESALE_DATE = 1684508400;
+
+    /// Public sale date - Friday, May 19, 2023 8:00 PM GMT
+    uint64 public constant PUBLIC_SALE_DATE = 1684526400;
+
+    /// Reveal date - Friday, May 26, 2023 8:00 PM
+    uint64 public constant REVEAL_DATE = 1685131200;
+
     /// Total supply
     uint32 public constant TOTAL_SUPPLY = 5000;
 
     /// Interval for OG members to mint their token during presale
-    uint16 public constant PRESALE_INTERVAL = 15 minutes;
+    uint32 public constant PRESALE_INTERVAL = 15 minutes;
 
     /// Number of reserved tokens
     uint16 public constant RESERVED_TOKENS = 50;
@@ -66,66 +78,38 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
     /// Max number of tokens per WL wallet
     uint16 public constant PRESALE_MAX_TOKEN_PER_WL = 2;
 
+    /// Max number of tokens per WL wallet
+    uint16 public constant PUBLIC_SALE_MAX_TOKEN = 5;
+
     ///////////////////////////////////////////////
     /// Storage
     //////////////////////////////////////////////
 
-    /// Price per token for public sale
-    uint256 public price;
-
-    /// Presale Date
-    uint64 public presaleDate;
-
-    /// Public sale date
-    uint64 public publicSaleDate;
-
-    /// Reveal Date
-    uint64 public revealDate;
-
-    /// Max token per wallet for public sale
-    uint32 public maxTokenPerWallet;
-
     /// Merkle roots for OG
-    bytes32 public ogMerkleRoot;
+    bytes32 public immutable ogMerkleRoot;
 
     /// Merkle roots for whitelist members
-    bytes32 public wlMerkleRoot;
-
-    /// Contract URI
-    string public contractURI;
+    bytes32 public immutable wlMerkleRoot;
 
     /// Metadata URI
     string private metadataBaseURI;
 
-    /// Hidden token URI
-    string private hiddenTokenURI;
-
     /// Owner's balance during public sale
     mapping(address => uint256) public publicSaleBalances;
+
+    /// Custom metadata URI for OG
+    mapping(uint256 => string) public customMetadataURI;
+
+    /// Custom metadata URI checker
+    mapping(uint256 => bool) public isTokenHasCustomMetadataURI;
 
     ///////////////////////////////////////////////
     /// Events
     //////////////////////////////////////////////
 
-    event SetPrice(uint256 indexed _price);
-
-    event SetMaxTokenPerWallet(uint256 indexed _maxTokenPerWallet);
-
-    event SetContractURI(string indexed _uri);
+    event SetCustomMetadataURI(uint256 indexed _token, string _uri);
 
     event SetMetadataBaseURI(string indexed _uri);
-
-    event SetHiddenTokenURI(string indexed _uri);
-
-    event SetOgMerkleRoot(bytes32 indexed _merkleRoot);
-
-    event SetWlMerkleRoot(bytes32 indexed _merkleRoot);
-
-    event SetPresaleDate(uint64 indexed _date);
-
-    event SetPublicSaleDate(uint64 indexed _date);
-
-    event SetRevealDate(uint64 indexed _date);
 
     event Withdraw(uint256 indexed _dateWithdrew, uint256 _amount);
 
@@ -135,31 +119,12 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
 
     constructor(
         address _owner,
-        uint256 _price,
-        uint32 _maxTokenPerWallet,
-        uint64 _presaleDate,
-        uint64 _publicSaleDate,
-        uint64 _revealDate,
         bytes32 _ogMerkleRoot,
         bytes32 _wlMerkleRoot,
-        address[] memory _operators,
-        string memory _contractURI,
-        string memory _hiddenTokenURI
+        address[] memory _operators
     ) ERC721A("Who Is Who", "WhoIsWho") MultiConfirm(_operators) {
-        price = _price;
-        maxTokenPerWallet = _maxTokenPerWallet;
         ogMerkleRoot = _ogMerkleRoot;
         wlMerkleRoot = _wlMerkleRoot;
-        contractURI = _contractURI;
-        hiddenTokenURI = _hiddenTokenURI;
-
-        /**
-         * @notice Initial presale, public, and reveal dates are set during contract's deployment.
-         * These are changeable variables; this might change after the contract has been deployed
-         */
-        presaleDate = _presaleDate;
-        publicSaleDate = _publicSaleDate;
-        revealDate = _revealDate;
 
         for (uint256 i = 0; i < _operators.length; i++) {
             _grantRole(OPERATOR_ROLE, _operators[i]);
@@ -174,7 +139,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
         _transferOwnership(_owner);
 
         /// Mint reserved tokens to the owner
-        _safeMint(_owner, RESERVED_TOKENS);
+        _safeMint(_owner, RESERVED_TOKENS + 1);
     }
 
     ///////////////////////////////////////////////
@@ -182,15 +147,10 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
     //////////////////////////////////////////////
     modifier stageCompliance(SaleStage _stage) {
         SaleStage stage = getSaleStage();
-
-        /// @notice Allow OG to mint tokens during whitelist stage
-        if (_stage == SaleStage.PRESALE_OG) {
-            if (stage != SaleStage.PRESALE_OG && stage != SaleStage.PRESALE_WL) {
-                revert WhoIsWho__StageNotReady();
-            }
-        }
-
-        if (stage != _stage) {
+        if (
+            (_stage == SaleStage.PRESALE_OG && stage != SaleStage.PRESALE_OG && stage != SaleStage.PRESALE_WL) ||
+            (_stage != SaleStage.PRESALE_OG && stage != _stage)
+        ) {
             revert WhoIsWho__StageNotReady();
         }
         _;
@@ -243,7 +203,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
          */
         unchecked {
             uint256 totalBalanceAfterMint = publicSaleBalances[_msgSender()] + _mintAmount;
-            if (totalBalanceAfterMint > maxTokenPerWallet) {
+            if (totalBalanceAfterMint > PUBLIC_SALE_MAX_TOKEN) {
                 revert WhoIsWho__MaxMint();
             }
         }
@@ -313,9 +273,9 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
         payable
         nonReentrant
         stageCompliance(SaleStage.PUBLIC_SALE)
-        mintCompliance(_mintAmount, maxTokenPerWallet)
+        mintCompliance(_mintAmount, PUBLIC_SALE_MAX_TOKEN)
         mintComplianceForPublicSale(_mintAmount)
-        mintPriceCompliance(_mintAmount, price)
+        mintPriceCompliance(_mintAmount, PUBLIC_SALE_PRICE)
     {
         publicSaleBalances[_msgSender()] += _mintAmount;
         _safeMint(_msgSender(), _mintAmount);
@@ -327,7 +287,11 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
         }
 
         if (!isReveal()) {
-            return hiddenTokenURI;
+            return hiddenTokenURI();
+        }
+
+        if (isTokenHasCustomMetadataURI[_tokenId]) {
+            return customMetadataURI[_tokenId];
         }
 
         string memory currentBaseURI = _baseURI();
@@ -342,7 +306,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
     function getSaleStage() public view returns (SaleStage stage) {
         uint256 timeNow = block.timestamp;
 
-        if (timeNow >= publicSaleDate) {
+        if (timeNow >= PUBLIC_SALE_DATE) {
             return SaleStage.PUBLIC_SALE;
         }
 
@@ -357,7 +321,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
              * @dev Adding `PRESALE_INTERVAL` to the presale date, it means that the minting
              * timeframe for OG members has elapsed
              */
-            interval = presaleDate + PRESALE_INTERVAL;
+            interval = PRESALE_DATE + PRESALE_INTERVAL;
         }
 
         if (timeNow >= interval) {
@@ -369,7 +333,7 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
          * tokens, followed by whitelist members who can start minting only after a
          * specified time period defined in `PRESALE_INTERVAL`
          */
-        if (timeNow >= presaleDate) {
+        if (timeNow >= PRESALE_DATE) {
             return SaleStage.PRESALE_OG;
         }
 
@@ -380,12 +344,20 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
         return publicSaleBalances[_account];
     }
 
+    function contractURI() public pure returns (string memory) {
+        return "https://www.whoiswho.io/contractURI.json";
+    }
+
+    function hiddenTokenURI() public pure returns (string memory) {
+        return "https://www.whoiswho.io/hidden.json";
+    }
+
     ///////////////////////////////////////////////
     /// Internal methods
     //////////////////////////////////////////////
 
     function isReveal() internal view returns (bool) {
-        return uint64(block.timestamp) >= revealDate;
+        return uint64(block.timestamp) >= REVEAL_DATE;
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
@@ -401,64 +373,17 @@ contract WhoIsWho is ERC721A, MultiConfirm, Ownable, AccessControl, ReentrancyGu
         _safeMint(_recipient, _mintAmount);
     }
 
-    /// Sets the public price of the token
-    function setPrice(uint256 _price) external onlyRole(OPERATOR_ROLE) {
-        price = _price;
-        emit SetPrice(_price);
-    }
-
-    ///  Sets the maximum token per wallet during public sale
-    function setMaxTokenPerWallet(uint32 _maxTokenPerWallet) external onlyRole(OPERATOR_ROLE) {
-        maxTokenPerWallet = _maxTokenPerWallet;
-        emit SetMaxTokenPerWallet(_maxTokenPerWallet);
-    }
-
-    /// Sets contract uri for Opensea
-    function setContractURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
-        contractURI = _uri;
-        emit SetContractURI(_uri);
+    /// Sets custom metadata URI for a specific token
+    function setCustomMetadataURI(uint256 _token, string memory _uri) external onlyRole(OPERATOR_ROLE) {
+        customMetadataURI[_token] = _uri;
+        isTokenHasCustomMetadataURI[_token] = true;
+        emit SetCustomMetadataURI(_token, _uri);
     }
 
     /// Sets token medata uri
     function setMetadataBaseURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
         metadataBaseURI = _uri;
         emit SetMetadataBaseURI(_uri);
-    }
-
-    /// Sets hidden token uri
-    function setHiddenTokenURI(string memory _uri) external onlyRole(OPERATOR_ROLE) {
-        hiddenTokenURI = _uri;
-        emit SetHiddenTokenURI(_uri);
-    }
-
-    /// Sets OG merkle root for lazy minting
-    function setOgMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
-        ogMerkleRoot = _merkleRoot;
-        emit SetOgMerkleRoot(_merkleRoot);
-    }
-
-    /// Sets WL merkle root for lazy minting
-    function setWlMerkleRoot(bytes32 _merkleRoot) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
-        wlMerkleRoot = _merkleRoot;
-        emit SetWlMerkleRoot(_merkleRoot);
-    }
-
-    /// Sets presale date during only in the idle stage
-    function setPresaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
-        presaleDate = _date;
-        emit SetPresaleDate(_date);
-    }
-
-    /// Sets public sale date during only in the idle stage
-    function setPublicSaleDate(uint64 _date) external onlyRole(OPERATOR_ROLE) stageCompliance(SaleStage.IDLE) {
-        publicSaleDate = _date;
-        emit SetPublicSaleDate(_date);
-    }
-
-    /// Sets reveal date
-    function setRevealDate(uint64 _date) external onlyRole(OPERATOR_ROLE) {
-        revealDate = _date;
-        emit SetRevealDate(_date);
     }
 
     function submitWithdrawTransaction(
