@@ -27,7 +27,12 @@ export const CollectionConfig = {
   metadataBaseURI: ''
 };
 
-const operators = [process.env.OPERATOR_1_ADDRESS, process.env.OPERATOR_2_ADDRESS, process.env.ADMIN_ADDRESS];
+const operators = [
+  process.env.OPERATOR_1_ADDRESS,
+  process.env.OPERATOR_2_ADDRESS,
+  process.env.OPERATOR_3_ADDRESS,
+  process.env.ADMIN_ADDRESS
+];
 
 export const CollectionArguments = [
   process.env.ADMIN_ADDRESS,

@@ -17,6 +17,11 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {},
+    mainnet: {
+      url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      accounts: [process.env.PRIV_KEY as string],
+      chainId: 1
+    },
     sepolia: {
       url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.PRIV_KEY as string],
@@ -35,6 +40,7 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
+      mainnet: process.env.ETHERSCAN_API_KEY as string,
       goerli: process.env.ETHERSCAN_API_KEY as string,
       sepolia: process.env.ETHERSCAN_API_KEY as string,
       bscTestnet: process.env.BSCSCAN_API_KEY as string
