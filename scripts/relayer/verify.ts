@@ -1,6 +1,6 @@
-import { CollectionArguments } from '../config/collection.config';
 import hre from 'hardhat';
 
+// npx hardhat run scripts/relayer/verify.ts
 async function main() {
   const network = hre.hardhatArguments.network;
 
@@ -10,9 +10,12 @@ async function main() {
 
   await hre
     .run('verify:verify', {
-      address: process.env[`${network?.toUpperCase()}_COLLECTION_ADDRESS`],
-      contract: 'contracts/WhoIsWho.sol:WhoIsWho',
-      constructorArguments: [...CollectionArguments]
+      address: process.env[`${network?.toUpperCase()}_RELAYER_ADDRESS`],
+      contract: 'contracts/relayer/Relayer.sol:Relayer',
+      constructorArguments: [
+        process.env[`${network?.toUpperCase()}_COLLECTION_ADDRESS`],
+        `0x${process.env.WHITELISTS_MERKLE_ROOT}`
+      ]
     })
     .catch((error) => {
       console.error(error);

@@ -21,6 +21,11 @@ export const CollectionConfig = {
     date: 1684526400,
     maxTokenPerWallet: 5
   },
+  relay: {
+    price: 0.02,
+    presaleStartDate: 1684771200,
+    presaleEndDate: 1685116800
+  },
   presaleInterval: 900, // 15 minutes in seconds
   reservedTokens: 50,
   revealDate: 1685131200,
@@ -36,7 +41,7 @@ const operators = [
 
 export const CollectionArguments = [
   process.env.ADMIN_ADDRESS,
-  process.env?.OGLISTS_MERKLE_ROOT ? `0x${process.env?.OGLISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
-  process.env?.WHITELISTS_MERKLE_ROOT ? `0x${process.env?.WHITELISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
+  process.env?.OGLISTS_MERKLE_ROOT ? `0x${process.env.OGLISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
+  process.env?.WHITELISTS_MERKLE_ROOT ? `0x${process.env.WHITELISTS_MERKLE_ROOT}` : utils.formatBytes32String(''),
   operators
 ];

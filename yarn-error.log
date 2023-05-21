@@ -1,8 +1,8 @@
 Arguments: 
-  /opt/homebrew/Cellar/node/19.6.1/bin/node /opt/homebrew/bin/yarn add -D merkletreejs
+  /opt/homebrew/Cellar/node/19.6.1/bin/node /opt/homebrew/bin/yarn add solc
 
 PATH: 
-  /opt/homebrew/bin:/opt/homebrew/sbin:/Library/Frameworks/Python.framework/Versions/3.11/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Users/kennieharoldmantac/Library/Android/sdk/emulator:/Users/kennieharoldmantac/Library/Android/sdk/platform-tools
+  /Users/kennieharoldmantac/.rvm/gems/ruby-3.0.0/bin:/Users/kennieharoldmantac/.rvm/gems/ruby-3.0.0@global/bin:/Users/kennieharoldmantac/.rvm/rubies/ruby-3.0.0/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Library/Frameworks/Python.framework/Versions/3.11/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Users/kennieharoldmantac/Library/Android/sdk/emulator:/Users/kennieharoldmantac/Library/Android/sdk/platform-tools:/Users/kennieharoldmantac/.rvm/bin
 
 Yarn version: 
   1.22.19
@@ -14,7 +14,7 @@ Platform:
   darwin arm64
 
 Trace: 
-  Error: connect ENETUNREACH 2606:4700::6810:1723:443
+  Error: connect ENETUNREACH 2606:4700::6810:1123:443
       at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1494:16)
 
 npm manifest: 
@@ -24,7 +24,10 @@ npm manifest:
     "description": "",
     "main": "index.js",
     "scripts": {
-      "test": "echo \"Error: no test specified\" && exit 1"
+      "test": "hardhat test",
+      "lint": "solhint 'contracts/*.sol'",
+      "toolbox": "docker run -it -v $PWD:/src trailofbits/eth-security-toolbox",
+      "slither": "slither . --solc-remaps '@openzeppelin=node_modules/@openzeppelin erc721a=node_modules/erc721a' --exclude naming-convention,external-function,low-level-calls"
     },
     "keywords": [],
     "author": "",
@@ -48,6 +51,7 @@ npm manifest:
       "hardhat": "^2.13.0",
       "hardhat-gas-reporter": "^1.0.8",
       "keccak256": "^1.0.6",
+      "merkletreejs": "^0.3.9",
       "prettier": "^2.8.6",
       "prettier-plugin-solidity": "^1.1.3",
       "solhint": "^3.4.1",
@@ -1339,6 +1343,11 @@ Lockfile:
     resolved "https://registry.yarnpkg.com/bigint-mod-arith/-/bigint-mod-arith-3.1.2.tgz#658e416bc593a463d97b59766226d0a3021a76b1"
     integrity sha512-nx8J8bBeiRR+NlsROFH9jHswW5HO8mgfOSqW0AmjicMMvaONDa8AO+5ViKDUUNytBPWiwfvZP4/Bj4Y3lUfvgQ==
   
+  bignumber.js@^9.0.1:
+    version "9.1.1"
+    resolved "https://registry.yarnpkg.com/bignumber.js/-/bignumber.js-9.1.1.tgz#c4df7dc496bd849d4c9464344c1aa74228b4dac6"
+    integrity sha512-pHm4LsMJ6lzgNGVfZHjMoO8sdoRhOzOH4MLmY65Jg70bpxCKu5iOHNJyfF6OyvYw7t8Fpf35RuzUyqnQsj8Vig==
+  
   binary-extensions@^2.0.0:
     version "2.2.0"
     resolved "https://registry.yarnpkg.com/binary-extensions/-/binary-extensions-2.2.0.tgz#75f502eeaf9ffde42fc98829645be4ea76bd9e2d"
@@ -1438,6 +1447,11 @@ Lockfile:
     version "1.1.2"
     resolved "https://registry.yarnpkg.com/buffer-from/-/buffer-from-1.1.2.tgz#2b146a6fd72e80b4f55d255f35ed59a3a9a41bd5"
     integrity sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==
+  
+  buffer-reverse@^1.0.1:
+    version "1.0.1"
+    resolved "https://registry.yarnpkg.com/buffer-reverse/-/buffer-reverse-1.0.1.tgz#49283c8efa6f901bc01fa3304d06027971ae2f60"
+    integrity sha512-M87YIUBsZ6N924W57vDwT/aOu8hw7ZgdByz6ijksLjmHJELBASmYTTlNHRgjE+pTsT9oJXGaDSgqqwfdHotDUg==
   
   buffer-xor@^1.0.3:
     version "1.0.3"
@@ -1786,6 +1800,11 @@ Lockfile:
     version "0.0.2"
     resolved "https://registry.yarnpkg.com/crypt/-/crypt-0.0.2.tgz#88d7ff7ec0dfb86f713dc87bbb42d044d3e6c41b"
     integrity sha512-mCxBlsHFYh9C+HVpiEacem8FEBnMXgU9gy4zmNC+SXAZNB/1idgp/aulFJ4FgCi7GPEVbfyng092GqL2k2rmow==
+  
+  crypto-js@^3.1.9-1:
+    version "3.3.0"
+    resolved "https://registry.yarnpkg.com/crypto-js/-/crypto-js-3.3.0.tgz#846dd1cce2f68aacfa156c8578f926a609b7976b"
+    integrity sha512-DIT51nX0dCfKltpRiXV+/TVZq+Qq2NgF4644+K7Ttnla7zEzqc+kjJyiB96BHNyUTBxyjzRcZYpUdZa+QAqi6Q==
   
   dashdash@^1.12.0:
     version "1.14.1"
@@ -3421,6 +3440,17 @@ Lockfile:
     resolved "https://registry.yarnpkg.com/merge2/-/merge2-1.4.1.tgz#4368892f885e907455a6fd7dc55c0c9d404990ae"
     integrity sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==
   
+  merkletreejs@^0.3.9:
+    version "0.3.9"
+    resolved "https://registry.yarnpkg.com/merkletreejs/-/merkletreejs-0.3.9.tgz#cdb364a3b974a44f4eff3446522d7066e0cf95de"
+    integrity sha512-NjlATjJr4NEn9s8v/VEHhgwRWaE1eA/Une07d9SEqKzULJi1Wsh0Y3svwJdP2bYLMmgSBHzOrNydMWM1NN9VeQ==
+    dependencies:
+      bignumber.js "^9.0.1"
+      buffer-reverse "^1.0.1"
+      crypto-js "^3.1.9-1"
+      treeify "^1.1.0"
+      web3-utils "^1.3.4"
+  
   micromatch@^4.0.4:
     version "4.0.5"
     resolved "https://registry.yarnpkg.com/micromatch/-/micromatch-4.0.5.tgz#bc8999a7cbbf77cdc89f132f6e467051b49090c6"
@@ -4733,6 +4763,11 @@ Lockfile:
       psl "^1.1.28"
       punycode "^2.1.1"
   
+  treeify@^1.1.0:
+    version "1.1.0"
+    resolved "https://registry.yarnpkg.com/treeify/-/treeify-1.1.0.tgz#4e31c6a463accd0943879f30667c4fdaff411bb8"
+    integrity sha512-1m4RA7xVAJrSGrrXGs0L3YTwyvBs2S8PbRHaLZAkFw7JR8oIFwYtysxlBZhYIa7xSyiYJKZ3iGrrk55cGA3i9A==
+  
   ts-command-line-args@^2.2.0:
     version "2.4.2"
     resolved "https://registry.yarnpkg.com/ts-command-line-args/-/ts-command-line-args-2.4.2.tgz#b4815b23c35f8a0159d4e69e01012d95690bc448"
@@ -4955,7 +4990,7 @@ Lockfile:
       core-util-is "1.0.2"
       extsprintf "^1.2.0"
   
-  web3-utils@^1.3.6:
+  web3-utils@^1.3.4, web3-utils@^1.3.6:
     version "1.9.0"
     resolved "https://registry.yarnpkg.com/web3-utils/-/web3-utils-1.9.0.tgz#7c5775a47586cefb4ad488831be8f6627be9283d"
     integrity sha512-p++69rCNNfu2jM9n5+VD/g26l+qkEOQ1m6cfRQCbH8ZRrtquTmrirJMgTmyOoax5a5XRYOuws14aypCOs51pdQ==

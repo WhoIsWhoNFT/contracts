@@ -1,6 +1,7 @@
 import { ethers } from 'hardhat';
-import { CollectionArguments, CollectionConfig } from '../config/collection.config';
+import { CollectionArguments, CollectionConfig } from '../../config/collection.config';
 
+// npx hardhat run scripts/collection/deploy.ts
 async function main() {
   const WhoIsWho = await ethers.getContractFactory(CollectionConfig.contractName);
   const whoIsWho = await WhoIsWho.deploy(...CollectionArguments);
