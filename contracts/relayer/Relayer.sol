@@ -11,9 +11,8 @@ interface IWhoIsWho {
 
 contract Relayer {
     uint256 public mintPrice = 0.02 ether;
-    uint256 public presaleStartDate = 1684699200;
-    uint256 public presaleEndDate = 1684700100;
-    bytes32 public immutable wlMerkleRoot;
+    uint256 public presaleStartDate = 1684854000;
+    uint256 public presaleEndDate = 1685131200;
     address public owner;
     address public immutable whoIsWhoContract;
 
@@ -24,21 +23,17 @@ contract Relayer {
         _;
     }
 
-    constructor(address _whoIsWhoContract, bytes32 _wlMerkleRoot) {
+    constructor(address _whoIsWhoContract) {
         whoIsWhoContract = _whoIsWhoContract;
-        wlMerkleRoot = _wlMerkleRoot;
         owner = msg.sender;
     }
 
-    function mintRelay(uint256 _mintAmount, bytes32[] calldata _merkleProof) external payable {
-        bytes32 leaf = keccak256(abi.encodePacked(address(msg.sender)));
-
+    function mintRelay(uint256 _mintAmount) external payable {
         if (
             _mintAmount == 0 ||
             _mintAmount * mintPrice > msg.value ||
             block.timestamp < presaleStartDate ||
-            block.timestamp > presaleEndDate ||
-            !MerkleProof.verify(_merkleProof, wlMerkleRoot, leaf)
+            block.timestamp > presaleEndDate
         ) {
             revert Relayer__InvalidCall();
         }

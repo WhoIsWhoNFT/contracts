@@ -11,12 +11,8 @@ async function main() {
   const collectionAddress =
     process.env[`${network?.toUpperCase()}_COLLECTION_ADDRESS`] ?? utils.formatBytes32String('');
 
-  const merkleRoot = process.env?.WHITELISTS_MERKLE_ROOT
-    ? `0x${process.env.WHITELISTS_MERKLE_ROOT}`
-    : utils.formatBytes32String('');
-
   const Relayer = await ethers.getContractFactory('Relayer');
-  const relayer = await Relayer.deploy(collectionAddress, merkleRoot);
+  const relayer = await Relayer.deploy(collectionAddress);
 
   await relayer.deployed();
   console.log(`Relayer deployed to ${relayer.address}`);

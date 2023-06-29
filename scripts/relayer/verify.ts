@@ -12,10 +12,7 @@ async function main() {
     .run('verify:verify', {
       address: process.env[`${network?.toUpperCase()}_RELAYER_ADDRESS`],
       contract: 'contracts/relayer/Relayer.sol:Relayer',
-      constructorArguments: [
-        process.env[`${network?.toUpperCase()}_COLLECTION_ADDRESS`],
-        `0x${process.env.WHITELISTS_MERKLE_ROOT}`
-      ]
+      constructorArguments: [process.env[`${network?.toUpperCase()}_COLLECTION_ADDRESS`]]
     })
     .catch((error) => {
       console.error(error);
