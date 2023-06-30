@@ -59,13 +59,8 @@ describe('Relayer test suite', function () {
   });
 
   it('should deploy relayer contract', async function () {
-    // Build merkle tree for WL
-    const wlLeafNodes = whitelistedSigners.map((addr) => keccak256(addr.address));
-    wlMerkleTree = new MerkleTree(wlLeafNodes, keccak256, { sortPairs: true });
-    const wlRootHash = wlMerkleTree.getRoot();
-
     const Relayer = await ethers.getContractFactory('Relayer');
-    relayer = await Relayer.deploy(collection.address, '0x' + wlRootHash.toString('hex'));
+    relayer = await Relayer.deploy(collection.address);
     relayer.deployed();
   });
 
@@ -76,7 +71,7 @@ describe('Relayer test suite', function () {
 
   it('should revert whitelist mint before presale', async function () {
     await expect(
-      relayer.connect(whitelistedSigners[0]).mintRelay(1, getProof(wlMerkleTree, whitelistedSigners[0].address), {
+      relayer.connect(whitelistedSigners[0]).mintRelay(1, {
         value: getPrice(CollectionConfig.relay.price, 1)
       })
     ).to.be.revertedWithCustomError(relayer, 'Relayer__InvalidCall');
@@ -84,13 +79,13 @@ describe('Relayer test suite', function () {
 
   it('should relay presale whitelist mint', async function () {
     await relayer.setPresaleStartDate(parseInt(String(new Date('January 1, 2023 00:00:00').getTime() / 1000)));
-    await relayer.connect(whitelistedSigners[0]).mintRelay(1, getProof(wlMerkleTree, whitelistedSigners[0].address), {
+    await relayer.connect(whitelistedSigners[0]).mintRelay(1, {
       value: getPrice(CollectionConfig.relay.price, 1)
     });
-    await relayer.connect(whitelistedSigners[1]).mintRelay(3, getProof(wlMerkleTree, whitelistedSigners[1].address), {
+    await relayer.connect(whitelistedSigners[1]).mintRelay(3, {
       value: getPrice(CollectionConfig.relay.price, 3)
     });
-    await relayer.connect(whitelistedSigners[2]).mintRelay(5, getProof(wlMerkleTree, whitelistedSigners[2].address), {
+    await relayer.connect(whitelistedSigners[2]).mintRelay(5, {
       value: getPrice(CollectionConfig.relay.price, 5)
     });
     expect(await collection.balanceOf(whitelistedSigners[0].address)).to.be.equal(1);
@@ -110,7 +105,7 @@ describe('Relayer test suite', function () {
 
   it('should revert whitelist mint after the presale has ended', async function () {
     await expect(
-      relayer.connect(whitelistedSigners[0]).mintRelay(1, getProof(wlMerkleTree, whitelistedSigners[0].address), {
+      relayer.connect(whitelistedSigners[0]).mintRelay(1, {
         value: getPrice(CollectionConfig.relay.price, 1)
       })
     ).to.be.revertedWithCustomError(relayer, 'Relayer__InvalidCall');
