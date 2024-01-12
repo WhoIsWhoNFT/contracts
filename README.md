@@ -1,15 +1,9 @@
 # Who Is Who Contracts
 Who Is Who's Official NFT Smart Contracts, Based on the ERC721A Standard
 
+![banner](.github/assets/banner.avif)
 
-# ![whoiswho](https://whoiswho.io/banner.jpg)
-
-## 1. Important Links
-Contract Address: [0x8f07ab2b4fea713c110e820cfa5d8fe02daa3d74](https://etherscan.io/address/0x8f07ab2b4fea713c110e820cfa5d8fe02daa3d74) </br>
-Opensea: [https://opensea.io/collection/whoiswho-1](https://opensea.io/collection/whoiswho-1) </br>
-Official Website: [https://www.whoiswho.io](https://www.whoiswho.io)
-
-## 2. Gas Usage Report
+## ⛽️ Gas Usage Report
 
 ```
 ·-------------------------------------------|---------------------------|-------------|-----------------------------·
@@ -50,3 +44,11 @@ Official Website: [https://www.whoiswho.io](https://www.whoiswho.io)
 |  WhoIsWho                                 ·    3978823  ·    3979591  ·    3979547  ·       13.3 %  ·          -  │
 ·-------------------------------------------|-------------|-------------|-------------|---------------|-------------·
 ```
+
+## 🔗 Official Links
+
+[Contract](https://etherscan.io/address/0x8f07ab2b4fea713c110e820cfa5d8fe02daa3d74) </br>
+[Opensea](https://opensea.io/collection/whoiswho-1) </br>
+[Official Site](https://www.whoiswho.io) </br>
+[Instagram](https://www.instagram.com/whoiswho.crew/) </br>
+[Twitter](https://twitter.com/whoiswho_crew)
